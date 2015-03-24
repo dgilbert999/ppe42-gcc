@@ -3296,22 +3296,22 @@ rs6000_option_override_internal (bool global_init_p)
      trap.  The 750 does not cause an alignment trap (except when the
      target is unaligned).  */
 
-  if (!BYTES_BIG_ENDIAN && rs6000_cpu != PROCESSOR_PPC750)
-    {
+  //if (!BYTES_BIG_ENDIAN && rs6000_cpu != PROCESSOR_PPC750)
+  //  {
       if (TARGET_MULTIPLE)
 	{
 	  rs6000_isa_flags &= ~OPTION_MASK_MULTIPLE;
 	  if ((rs6000_isa_flags_explicit & OPTION_MASK_MULTIPLE) != 0)
-	    warning (0, "-mmultiple is not supported on little endian systems");
+	    warning (0, "-mmultiple is not supported on PPE");
 	}
 
       if (TARGET_STRING)
 	{
 	  rs6000_isa_flags &= ~OPTION_MASK_STRING;
 	  if ((rs6000_isa_flags_explicit & OPTION_MASK_STRING) != 0)
-	    warning (0, "-mstring is not supported on little endian systems");
+	    warning (0, "-mstring is not supported on PPE");
 	}
-    }
+  //  }
 
   /* If little-endian, default to -mstrict-align on older processors.
      Testing for htm matches power8 and later.  */
@@ -15743,6 +15743,7 @@ expand_block_move (rtx operands[])
           mode = V2SImode;
           gen_func.mov = gen_movv2si;
         }
+#ifdef __STRING_SUPPORT__
       else if (TARGET_STRING
 	  && bytes > 24		/* move up to 32 bytes at a time */
 	  && ! fixed_regs[5]
@@ -15793,6 +15794,7 @@ expand_block_move (rtx operands[])
 	  move_bytes = (bytes > 8) ? 8 : bytes;
 	  gen_func.movmemsi = gen_movmemsi_2reg;
 	}
+#endif
       else if (bytes >= 4 && (align >= 32 || !STRICT_ALIGNMENT))
 	{			/* move 4 bytes */
 	  move_bytes = 4;
@@ -15805,11 +15807,13 @@ expand_block_move (rtx operands[])
 	  mode = HImode;
 	  gen_func.mov = gen_movhi;
 	}
+#ifdef  __STRING_SUPPORT__
       else if (TARGET_STRING && bytes > 1)
 	{			/* move up to 4 bytes at a time */
 	  move_bytes = (bytes > 4) ? 4 : bytes;
 	  gen_func.movmemsi = gen_movmemsi_1reg;
 	}
+#endif
       else /* move 1 byte at a time */
 	{
 	  move_bytes = 1;
@@ -20820,12 +20824,16 @@ rs6000_savres_strategy (rs6000_stack_t *info,
   int strategy = 0;
   bool lr_save_p;
 
-  if (TARGET_MULTIPLE
+  /* ppe - stmw instruction not supported) */
+  /*if (TARGET_MULTIPLE
       && !TARGET_POWERPC64
       && !(TARGET_SPE_ABI && info->spe_64bit_regs_used)
       && info->first_gp_reg_save < 31
       && !global_regs_p (info->first_gp_reg_save, 32))
-    strategy |= SAVRES_MULTIPLE;
+    strategy |= SAVRES_MULTIPLE; */
+
+  /* ppe - always inline gpr saves/restores */
+  strategy |= SAVE_INLINE_GPRS | REST_INLINE_GPRS;
 
   if (crtl->calls_eh_return
       || cfun->machine->ra_need_lr)
@@ -22729,8 +22737,8 @@ static inline unsigned
 ptr_regno_for_savres (int sel)
 {
   if (DEFAULT_ABI == ABI_AIX || DEFAULT_ABI == ABI_ELFv2)
-    return (sel & SAVRES_REG) == SAVRES_FPR || (sel & SAVRES_LR) ? 1 : 12;
-  return DEFAULT_ABI == ABI_DARWIN && (sel & SAVRES_REG) == SAVRES_FPR ? 1 : 11;
+    return (sel & SAVRES_REG) == SAVRES_FPR || (sel & SAVRES_LR) ? 1 : 10;
+  return DEFAULT_ABI == ABI_DARWIN && (sel & SAVRES_REG) == SAVRES_FPR ? 1 : 9;
 }
 
 /* Construct a parallel rtx describing the effect of a call to an
@@ -22994,7 +23002,7 @@ rs6000_emit_prologue (void)
 		  && info->vrsave_save_offset == -224
 		  && info->altivec_save_offset == -416);
 
-      treg = gen_rtx_REG (SImode, 11);
+      treg = gen_rtx_REG (SImode, 10);
       emit_move_insn (treg, GEN_INT (-info->total_size));
 
       /* SAVE_WORLD takes the caller's LR in R0 and the frame size
@@ -23076,7 +23084,7 @@ rs6000_emit_prologue (void)
       if (info->total_size < 32767)
 	frame_off = info->total_size;
       else if (need_r11)
-	ptr_regno = 11;
+	ptr_regno = 9;
       else if (info->cr_save_p
 	       || info->lr_save_p
 	       || info->first_fp_reg_save < 64
@@ -23084,7 +23092,7 @@ rs6000_emit_prologue (void)
 	       || info->altivec_size != 0
 	       || info->vrsave_mask != 0
 	       || crtl->calls_eh_return)
-	ptr_regno = 12;
+	ptr_regno = 10;
       else
 	{
 	  /* The prologue won't be saving any regs so there is no need
@@ -23146,11 +23154,11 @@ rs6000_emit_prologue (void)
   cr_save_regno = ((DEFAULT_ABI == ABI_AIX || DEFAULT_ABI == ABI_ELFv2)
 		   && !(strategy & (SAVE_INLINE_GPRS
 				    | SAVE_NOINLINE_GPRS_SAVES_LR))
-		   ? 11 : 12);
+		   ? 9 : 10);
   if (!WORLD_SAVE_P (info)
       && info->cr_save_p
       && REGNO (frame_reg_rtx) != cr_save_regno
-      && !(using_static_chain_p && cr_save_regno == 11))
+      && !(using_static_chain_p && cr_save_regno == 9))
     {
       cr_save_rtx = gen_rtx_REG (SImode, cr_save_regno);
       START_USE (cr_save_regno);
@@ -23232,7 +23240,7 @@ rs6000_emit_prologue (void)
 	  if (!(strategy & SAVE_INLINE_GPRS))
 	    ool_adjust = 8 * (info->first_gp_reg_save - FIRST_SAVED_GP_REGNO);
 	  offset = info->spe_gp_save_offset + frame_off - ool_adjust;
-	  spe_save_area_ptr = gen_rtx_REG (Pmode, 11);
+	  spe_save_area_ptr = gen_rtx_REG (Pmode, 9);
 	  save_off = frame_off - offset;
 
 	  if (using_static_chain_p)
@@ -23244,12 +23252,12 @@ rs6000_emit_prologue (void)
 
 	      emit_move_insn (r0, spe_save_area_ptr);
 	    }
-	  else if (REGNO (frame_reg_rtx) != 11)
-	    START_USE (11);
+	  else if (REGNO (frame_reg_rtx) != 9)
+	    START_USE (9);
 
 	  emit_insn (gen_addsi3 (spe_save_area_ptr,
 				 frame_reg_rtx, GEN_INT (offset)));
-	  if (!using_static_chain_p && REGNO (frame_reg_rtx) == 11)
+	  if (!using_static_chain_p && REGNO (frame_reg_rtx) == 9)
 	    frame_off = -info->spe_gp_save_offset + ool_adjust;
 	}
 
@@ -23282,8 +23290,8 @@ rs6000_emit_prologue (void)
 	      emit_move_insn (spe_save_area_ptr, gen_rtx_REG (Pmode, 0));
 	      END_USE (0);
 	    }
-	  else if (REGNO (frame_reg_rtx) != 11)
-	    END_USE (11);
+	  else if (REGNO (frame_reg_rtx) != 9)
+	    END_USE (9);
 	}
     }
   else if (!WORLD_SAVE_P (info) && !(strategy & SAVE_INLINE_GPRS))
@@ -23390,15 +23398,15 @@ rs6000_emit_prologue (void)
       rtx save_insn, join_insn, note;
       long toc_restore_insn;
 
-      tmp_reg = gen_rtx_REG (Pmode, 11);
-      tmp_reg_si = gen_rtx_REG (SImode, 11);
+      tmp_reg = gen_rtx_REG (Pmode, 9);
+      tmp_reg_si = gen_rtx_REG (SImode, 9);
       if (using_static_chain_p)
 	{
 	  START_USE (0);
 	  emit_move_insn (gen_rtx_REG (Pmode, 0), tmp_reg);
 	}
       else
-	START_USE (11);
+	START_USE (9);
       emit_move_insn (tmp_reg, gen_rtx_REG (Pmode, LR_REGNO));
       /* Peek at instruction to which this function returns.  If it's
 	 restoring r2, then we know we've already saved r2.  We can't
@@ -23457,7 +23465,7 @@ rs6000_emit_prologue (void)
 	  END_USE (0);
 	}
       else
-	END_USE (11);
+	END_USE (9);
     }
 
   /* Save CR if we use any that must be preserved.  */
@@ -23644,7 +23652,7 @@ rs6000_emit_prologue (void)
       int scratch_regno = ptr_regno_for_savres (SAVRES_SAVE | SAVRES_VR);
       rtx scratch_reg = gen_rtx_REG (Pmode, scratch_regno);
 
-      gcc_checking_assert (scratch_regno == 11 || scratch_regno == 12);
+      gcc_checking_assert (scratch_regno == 9 || scratch_regno == 10);
       NOT_INUSE (0);
       if (end_save + frame_off != 0)
 	{
@@ -23728,13 +23736,13 @@ rs6000_emit_prologue (void)
       /* Get VRSAVE onto a GPR.  Note that ABI_V4 and ABI_DARWIN might
 	 be using r12 as frame_reg_rtx and r11 as the static chain
 	 pointer for nested functions.  */
-      save_regno = 12;
+      save_regno = 10;
       if ((DEFAULT_ABI == ABI_AIX || DEFAULT_ABI == ABI_ELFv2)
 	  && !using_static_chain_p)
-	save_regno = 11;
-      else if (REGNO (frame_reg_rtx) == 12)
+	save_regno = 9;
+      else if (REGNO (frame_reg_rtx) == 10)
 	{
-	  save_regno = 11;
+	  save_regno = 9;
 	  if (using_static_chain_p)
 	    save_regno = 0;
 	}
@@ -24200,7 +24208,7 @@ rs6000_emit_epilogue (int sibcall)
       /* The instruction pattern requires a clobber here;
 	 it is shared with the restVEC helper. */
       RTVEC_ELT (p, j++)
-	= gen_rtx_CLOBBER (VOIDmode, gen_rtx_REG (Pmode, 11));
+	= gen_rtx_CLOBBER (VOIDmode, gen_rtx_REG (Pmode, 9));
 
       {
 	/* CR register traditionally saved as CR2.  */
@@ -24280,16 +24288,16 @@ rs6000_emit_epilogue (int sibcall)
       int i;
       int scratch_regno = ptr_regno_for_savres (SAVRES_VR);
 
-      gcc_checking_assert (scratch_regno == 11 || scratch_regno == 12);
+      gcc_checking_assert (scratch_regno == 9 || scratch_regno == 10);
       if (use_backchain_to_restore_sp)
 	{
-	  int frame_regno = 11;
+	  int frame_regno = 9;
 
 	  if ((strategy & REST_INLINE_VRS) == 0)
 	    {
 	      /* Of r11 and r12, select the one not clobbered by an
 		 out-of-line restore function for the frame register.  */
-	      frame_regno = 11 + 12 - scratch_regno;
+	      frame_regno = 9 + 10 - scratch_regno;
 	    }
 	  frame_reg_rtx = gen_rtx_REG (Pmode, frame_regno);
 	  emit_move_insn (frame_reg_rtx,
@@ -24369,7 +24377,7 @@ rs6000_emit_epilogue (int sibcall)
 	{
 	  if (use_backchain_to_restore_sp)
 	    {
-	      frame_reg_rtx = gen_rtx_REG (Pmode, 11);
+	      frame_reg_rtx = gen_rtx_REG (Pmode, 9);
 	      emit_move_insn (frame_reg_rtx,
 			      gen_rtx_MEM (Pmode, sp_reg_rtx));
 	      frame_off = 0;
@@ -24378,7 +24386,7 @@ rs6000_emit_epilogue (int sibcall)
 	    frame_reg_rtx = hard_frame_pointer_rtx;
 	}
 
-      reg = gen_rtx_REG (SImode, 12);
+      reg = gen_rtx_REG (SImode, 10);
       emit_insn (gen_frame_load (reg, frame_reg_rtx,
 				 info->vrsave_save_offset + frame_off));
 
@@ -24395,7 +24403,7 @@ rs6000_emit_epilogue (int sibcall)
 	  /* Under V.4, don't reset the stack pointer until after we're done
 	     loading the saved registers.  */
 	  if (DEFAULT_ABI == ABI_V4)
-	    frame_reg_rtx = gen_rtx_REG (Pmode, 11);
+	    frame_reg_rtx = gen_rtx_REG (Pmode, 9);
 
 	  insn = emit_move_insn (frame_reg_rtx,
 				 gen_rtx_MEM (Pmode, sp_reg_rtx));
@@ -24417,7 +24425,7 @@ rs6000_emit_epilogue (int sibcall)
     {
       frame_reg_rtx = sp_reg_rtx;
       if (DEFAULT_ABI == ABI_V4)
-	frame_reg_rtx = gen_rtx_REG (Pmode, 11);
+	frame_reg_rtx = gen_rtx_REG (Pmode, 9);
       /* Prevent reordering memory accesses against stack pointer restore.  */
       else if (cfun->calls_alloca
 	       || offset_below_red_zone_p (-info->total_size))
@@ -24612,7 +24620,7 @@ rs6000_emit_epilogue (int sibcall)
   /* Get the old cr if we saved it.  */
   if (info->cr_save_p)
     {
-      unsigned cr_save_regno = 12;
+      unsigned cr_save_regno = 10;
 
       if (!restoring_GPRs_inline)
 	{
@@ -24622,12 +24630,12 @@ rs6000_emit_epilogue (int sibcall)
 	  int sel = SAVRES_GPR | (lr ? SAVRES_LR : 0);
 	  int gpr_ptr_regno = ptr_regno_for_savres (sel);
 
-	  if (gpr_ptr_regno == 12)
-	    cr_save_regno = 11;
+	  if (gpr_ptr_regno == 10)
+	    cr_save_regno = 9;
 	  gcc_checking_assert (REGNO (frame_reg_rtx) != cr_save_regno);
 	}
-      else if (REGNO (frame_reg_rtx) == 12)
-	cr_save_regno = 11;
+      else if (REGNO (frame_reg_rtx) == 10)
+	cr_save_regno = 9;
 
       cr_save_reg = load_cr_save (cr_save_regno, frame_reg_rtx,
 				  info->cr_save_offset + frame_off,
@@ -24692,7 +24700,7 @@ rs6000_emit_epilogue (int sibcall)
 
 	  if (!restoring_GPRs_inline)
 	    ool_adjust = 8 * (info->first_gp_reg_save - FIRST_SAVED_GP_REGNO);
-	  frame_reg_rtx = gen_rtx_REG (Pmode, 11);
+	  frame_reg_rtx = gen_rtx_REG (Pmode, 9);
 	  emit_insn (gen_addsi3 (frame_reg_rtx, old_frame_reg_rtx,
 				 GEN_INT (info->spe_gp_save_offset
 					  + frame_off
@@ -24942,7 +24950,7 @@ rs6000_emit_epilogue (int sibcall)
 	  sym = rs6000_savres_routine_sym (info,
 					   SAVRES_FPR | (lr ? SAVRES_LR : 0));
 	  RTVEC_ELT (p, 2) = gen_rtx_USE (VOIDmode, sym);
-	  reg = (DEFAULT_ABI == ABI_AIX || DEFAULT_ABI == ABI_ELFv2)? 1 : 11;
+	  reg = (DEFAULT_ABI == ABI_AIX || DEFAULT_ABI == ABI_ELFv2)? 1 : 10;
 	  RTVEC_ELT (p, 3) = gen_rtx_USE (VOIDmode, gen_rtx_REG (Pmode, reg));
 
 	  for (i = 0; i < 64 - info->first_fp_reg_save; i++)
@@ -26142,32 +26150,32 @@ output_function_profiler (FILE *file, int labelno)
 	      asm_fprintf (file, "\tbl %s\n\tb 1f\n\t.long ", name);
 	      assemble_name (file, buf);
 	      fputs ("-.\n1:", file);
-	      asm_fprintf (file, "\tmflr %s\n", reg_names[11]);
+	      asm_fprintf (file, "\tmflr %s\n", reg_names[9]);
 	      asm_fprintf (file, "\taddi %s,%s,4\n",
-			   reg_names[11], reg_names[11]);
+			   reg_names[9], reg_names[9]);
 	    }
 	  else
 	    {
 	      fputs ("\tbcl 20,31,1f\n\t.long ", file);
 	      assemble_name (file, buf);
 	      fputs ("-.\n1:", file);
-	      asm_fprintf (file, "\tmflr %s\n", reg_names[11]);
+	      asm_fprintf (file, "\tmflr %s\n", reg_names[9]);
 	    }
 	  asm_fprintf (file, "\tlwz %s,0(%s)\n",
-		       reg_names[0], reg_names[11]);
+		       reg_names[0], reg_names[9]);
 	  asm_fprintf (file, "\tadd %s,%s,%s\n",
-		       reg_names[0], reg_names[0], reg_names[11]);
+		       reg_names[0], reg_names[0], reg_names[9]);
 	}
       else
 	{
-	  asm_fprintf (file, "\tlis %s,", reg_names[12]);
+	  asm_fprintf (file, "\tlis %s,", reg_names[10]);
 	  assemble_name (file, buf);
 	  fputs ("@ha\n", file);
 	  asm_fprintf (file, "\tstw %s,4(%s)\n",
 		       reg_names[0], reg_names[1]);
 	  asm_fprintf (file, "\tla %s,", reg_names[0]);
 	  assemble_name (file, buf);
-	  asm_fprintf (file, "@l(%s)\n", reg_names[12]);
+	  asm_fprintf (file, "@l(%s)\n", reg_names[10]);
 	}
 
       /* ABI_V4 saves the static chain reg with ASM_OUTPUT_REG_PUSH.  */
@@ -28729,7 +28737,7 @@ macho_branch_islands (void)
 	      strcat (tmp_buf, name);
 	      strcat (tmp_buf, "\n");
 	      strcat (tmp_buf, label);
-	      strcat (tmp_buf, "_pic:\n\tmflr r11\n");
+	      strcat (tmp_buf, "_pic:\n\tmflr r9\n");
 	    }
 	  else
 	    {
@@ -28737,10 +28745,10 @@ macho_branch_islands (void)
 	      strcat (tmp_buf, label);
 	      strcat (tmp_buf, "_pic\n");
 	      strcat (tmp_buf, label);
-	      strcat (tmp_buf, "_pic:\n\tmflr r11\n");
+	      strcat (tmp_buf, "_pic:\n\tmflr r9\n");
 	    }
 
-	  strcat (tmp_buf, "\taddis r11,r11,ha16(");
+	  strcat (tmp_buf, "\taddis r9,r9,ha16(");
 	  strcat (tmp_buf, name_buf);
 	  strcat (tmp_buf, " - ");
 	  strcat (tmp_buf, label);
@@ -28748,21 +28756,21 @@ macho_branch_islands (void)
 
 	  strcat (tmp_buf, "\tmtlr r0\n");
 
-	  strcat (tmp_buf, "\taddi r12,r11,lo16(");
+	  strcat (tmp_buf, "\taddi r10,r9,lo16(");
 	  strcat (tmp_buf, name_buf);
 	  strcat (tmp_buf, " - ");
 	  strcat (tmp_buf, label);
 	  strcat (tmp_buf, "_pic)\n");
 
-	  strcat (tmp_buf, "\tmtctr r12\n\tbctr\n");
+	  strcat (tmp_buf, "\tmtctr r10\n\tbctr\n");
 	}
       else
 	{
-	  strcat (tmp_buf, ":\nlis r12,hi16(");
+	  strcat (tmp_buf, ":\nlis r10,hi16(");
 	  strcat (tmp_buf, name_buf);
-	  strcat (tmp_buf, ")\n\tori r12,r12,lo16(");
+	  strcat (tmp_buf, ")\n\tori r10,r10,lo16(");
 	  strcat (tmp_buf, name_buf);
-	  strcat (tmp_buf, ")\n\tmtctr r12\n\tbctr");
+	  strcat (tmp_buf, ")\n\tmtctr r10\n\tbctr");
 	}
       output_asm_insn (tmp_buf, 0);
 #if defined (DBX_DEBUGGING_INFO) || defined (XCOFF_DEBUGGING_INFO)
@@ -28889,20 +28897,20 @@ machopic_output_stub (FILE *file, const char *symb, const char *stub)
 	  char name[32];
 	  get_ppc476_thunk_name (name);
 	  fprintf (file, "\tbl %s\n", name);
-	  fprintf (file, "%s:\n\tmflr r11\n", local_label_0);
+	  fprintf (file, "%s:\n\tmflr r9\n", local_label_0);
 	}
       else
 	{
 	  fprintf (file, "\tbcl 20,31,%s\n", local_label_0);
-	  fprintf (file, "%s:\n\tmflr r11\n", local_label_0);
+	  fprintf (file, "%s:\n\tmflr r9\n", local_label_0);
 	}
-      fprintf (file, "\taddis r11,r11,ha16(%s-%s)\n",
+      fprintf (file, "\taddis r9,r9,ha16(%s-%s)\n",
 	       lazy_ptr_name, local_label_0);
       fprintf (file, "\tmtlr r0\n");
-      fprintf (file, "\t%s r12,lo16(%s-%s)(r11)\n",
+      fprintf (file, "\t%s r10,lo16(%s-%s)(r9)\n",
 	       (TARGET_64BIT ? "ldu" : "lwzu"),
 	       lazy_ptr_name, local_label_0);
-      fprintf (file, "\tmtctr r12\n");
+      fprintf (file, "\tmtctr r10\n");
       fprintf (file, "\tbctr\n");
     }
   else
@@ -28912,11 +28920,11 @@ machopic_output_stub (FILE *file, const char *symb, const char *stub)
       fprintf (file, "%s:\n", stub);
       fprintf (file, "\t.indirect_symbol %s\n", symbol_name);
 
-      fprintf (file, "\tlis r11,ha16(%s)\n", lazy_ptr_name);
-      fprintf (file, "\t%s r12,lo16(%s)(r11)\n",
+      fprintf (file, "\tlis r9,ha16(%s)\n", lazy_ptr_name);
+      fprintf (file, "\t%s r10,lo16(%s)(r9)\n",
 	       (TARGET_64BIT ? "ldu" : "lwzu"),
 	       lazy_ptr_name);
-      fprintf (file, "\tmtctr r12\n");
+      fprintf (file, "\tmtctr r10\n");
       fprintf (file, "\tbctr\n");
     }
 
