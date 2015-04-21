@@ -19134,12 +19134,50 @@ rs6000_emit_cbranch (enum machine_mode mode, rtx operands[])
 {
   rtx condition_rtx, loc_ref;
 
-  condition_rtx = rs6000_generate_compare (operands[0], mode);
+  // For fused compare-branch
+  //      jump distance +- 2k
+  //      Compare immediate limited to uint_5 (0-31)
+  //
+  //debug_rtx(operands[0]); // (eq (reg/v:SI 157 [ a ]) (const_int 31 [0x1f]))
+  //debug_rtx(operands[1]); // (reg/v:SI 157 [ a ])
+  //debug_rtx(operands[2]); // (const_int 31 [0x1f])
+  //debug_rtx(operands[3]); // (code_label 0 0 0 9 "" [0 uses])
+  //debug_rtx(condition_rtx); // (eq (reg:CC 158) (const_int 0 [0]))
+  //debug_rtx(loc_ref); // (label_ref 0)
+
   loc_ref = gen_rtx_LABEL_REF (VOIDmode, operands[3]);
-  emit_jump_insn (gen_rtx_SET (VOIDmode, pc_rtx,
-			       gen_rtx_IF_THEN_ELSE (VOIDmode, condition_rtx,
-						     loc_ref, pc_rtx)));
+
+  // TODO if not PPE42
+  // Split the compare and branch if not optimized for size
+  // or can't meet the constraints of fused compare-branch.
+  if(!optimize_size ||
+     ((GET_CODE (operands[2]) == CONST_INT) &&
+     ((INTVAL(operands[2]) < 0) || (INTVAL(operands[2]) > 31))))
+  {
+      condition_rtx = rs6000_generate_compare (operands[0], mode);
+
+      emit_jump_insn (gen_rtx_SET (VOIDmode,
+                                   pc_rtx,
+                                   gen_rtx_IF_THEN_ELSE (VOIDmode,
+                                                         condition_rtx,
+                                                         loc_ref,
+                                                         pc_rtx)));
+      // Note: even if the compare/branch is split here, the compiler might
+      // re-combine them (fuse) later in the 201r.combine step based
+      // on the *.md match - that can be controlled with the 
+      // rs6000_fused_cbranch_operator predicate and the optimize_size flag.
+  }
+  else // Use the PPE fused compare-branch instructions
+  {
+      emit_jump_insn(gen_rtx_SET(VOIDmode,
+                                 pc_rtx,
+                                 gen_rtx_IF_THEN_ELSE(VOIDmode,
+                                                      operands[0],
+                                                      loc_ref,
+                                                      pc_rtx)));
+  }
 }
+
 
 /* Return the string to output a conditional branch to LABEL, which is
    the operand template of the label, or NULL if the branch is really a
@@ -19152,6 +19190,83 @@ rs6000_emit_cbranch (enum machine_mode mode, rtx operands[])
    REVERSED is nonzero if we should reverse the sense of the comparison.
 
    INSN is the insn.  */
+
+char *
+output_fused_cbranch (rtx operands[], const char *label, rtx insn)
+{
+    static char string[64];
+    enum rtx_code code = GET_CODE (operands[1]);
+    int need_longbranch = get_attr_length (insn) == 8;
+    char *s = string;
+    const char *ccode;
+    const char *immed = "";
+    const char *logical = "";
+    int op3 = 0;
+
+    if(need_longbranch)
+        code = reverse_condition (code);
+    
+    switch (code)
+    {
+        case NE:
+        case LTGT:
+            ccode = "ne";
+            break;
+        case EQ:
+        case UNEQ:
+            ccode = "eq";
+            break;
+        case GE:
+        case GEU:
+            ccode = "ge";
+            break;
+        case GT:
+        case GTU:
+        case UNGT:
+            ccode = "gt";
+            break;
+        case LE:
+        case LEU:
+            ccode = "le";
+            break;
+        case LT:
+        case LTU: case UNLT:
+            ccode = "lt";
+            break;
+        default:
+            gcc_unreachable();
+    }
+
+    // Set immediate 
+    // Can't do unsigned(logical) compare on immediate
+    if(GET_CODE (operands[3]) == CONST_INT)
+    {
+        op3 = INTVAL(operands[3]);
+        immed = "i";
+    }
+    else if( unsigned_reg_p (operands[2]) &&
+             unsigned_reg_p (operands[3]))
+    {
+        logical = "l";
+        op3 = REGNO(operands[3]);
+    }
+    else
+    {
+        op3 = REGNO(operands[3]);
+    }
+
+
+    s += sprintf(s, "cmp%sw%sb%s %d, %d", logical,
+                 immed, ccode, REGNO(operands[2]), op3);
+    
+    if (need_longbranch)
+        s += sprintf(s, ",$+8\n\tb %s", label);
+    else
+        s += sprintf(s, ",%s", label);
+
+    return string;
+}
+
 
 char *
 output_cbranch (rtx op, const char *label, int reversed, rtx insn)

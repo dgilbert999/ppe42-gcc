@@ -1195,6 +1195,19 @@
 				   (match_code ("unlt,unle,ungt,unge"))))
 		(match_operand 0 "comparison_operator")))
 
+;; Return 1 if OP is a valid comparison operator for "fused cbranch"
+;; instructions
+(define_predicate "rs6000_fused_cbranch_operator"
+  (match_operand 0 "comparison_operator")
+{
+  if(GET_CODE(XEXP(op,1)) == CONST_INT )
+  {
+    if((INTVAL(XEXP(op,1)) < 32) && (INTVAL(XEXP(op,1)) >= 0)) return 1;
+    else return 0;
+  }
+  return 1;
+})
+
 ;; Return 1 if OP is a comparison operation that is valid for an SCC insn --
 ;; it must be a positive comparison.
 (define_predicate "scc_comparison_operator"
