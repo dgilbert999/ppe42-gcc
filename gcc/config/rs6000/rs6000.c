@@ -20501,6 +20501,30 @@ rs6000_split_multireg_move (rtx dst, rtx src)
   /* The number of registers that will be moved.  */
   int nregs;
 
+  // if ppe42 then use 64bit load/store
+  {
+      rtx reg_op = NULL;
+      rtx mem_op = NULL;
+
+      if( MEM_P (src) && REG_P (dst) )
+      {
+          mem_op = src;
+          reg_op = dst;
+      }
+      else if( REG_P (src) && MEM_P (dst) )
+      {
+          mem_op = dst;
+          reg_op = src;
+      }
+      if(reg_op && mem_op &&
+         (GET_MODE (dst) == DImode && GET_MODE (src) == DImode))
+      {
+          // TODO check for alignment on memory
+          emit_insn (gen_rtx_SET (DImode, dst, src));
+          return;
+      }
+  }
+
   reg = REG_P (dst) ? REGNO (dst) : REGNO (src);
   mode = GET_MODE (dst);
   nregs = hard_regno_nregs[reg][mode];
@@ -31622,7 +31646,7 @@ static struct rs6000_opt_mask const rs6000_builtin_mask_names[] =
 struct rs6000_opt_var {
   const char *name;		/* option name */
   size_t global_offset;		/* offset of the option in global_options.  */
-  size_t target_offset;		/* offset of the option in target optiosn.  */
+  size_t target_offset;		/* offset of the option in target options.  */
 };
 
 static struct rs6000_opt_var const rs6000_opt_vars[] =
