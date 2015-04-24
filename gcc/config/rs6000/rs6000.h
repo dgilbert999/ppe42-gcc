@@ -886,7 +886,7 @@ enum data_align { align_abi, align_opt, align_both };
 
 /* Nonzero if move instructions will actually fail to work
    when given unaligned data.  */
-#define STRICT_ALIGNMENT 0
+#define STRICT_ALIGNMENT 1
 
 /* Define this macro to be the value 1 if unaligned accesses have a cost
    many times greater than aligned accesses, for example if they are
@@ -1029,8 +1029,8 @@ enum data_align { align_abi, align_opt, align_both };
    of `CALL_USED_REGISTERS'.  */
 
 #define CALL_REALLY_USED_REGISTERS  \
-  {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, FIXED_R13, 1, 1, \
-   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, \
+  {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, FIXED_R13, 0, 0, \
+   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, \
    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
    1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1,	   \
@@ -1112,9 +1112,9 @@ enum data_align { align_abi, align_opt, align_both };
    68,					\
    MAYBE_R2_AVAILABLE						\
    9, 10, 8, 7, 6, 5, 4,					\
-   3, EARLY_R12 0,						\
+   3, 0,						\
    31, 30, 29, 28, 		\
-   13, LATE_R12				\
+   13,				\
    66, 65,							\
    73, 1, MAYBE_R2_FIXED 67, 76,				\
    /* AltiVec registers.  */					\
@@ -1407,9 +1407,9 @@ enum reg_class
   /* NO_REGS.  */							\
   { 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000 },	\
   /* BASE_REGS.  */							\
-  { 0xfffffffe, 0x00000000, 0x00000008, 0x00020000, 0x00000000 },	\
+  { 0xf00027fe, 0x00000000, 0x00000008, 0x00020000, 0x00000000 },	\
   /* GENERAL_REGS.  */							\
-  { 0xffffffff, 0x00000000, 0x00000008, 0x00020000, 0x00000000 },	\
+  { 0xf00027ff, 0x00000000, 0x00000008, 0x00020000, 0x00000000 },	\
   /* FLOAT_REGS.  */							\
   { 0x00000000, 0xffffffff, 0x00000000, 0x00000000, 0x00000000 },	\
   /* ALTIVEC_REGS.  */							\
