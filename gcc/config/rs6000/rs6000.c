@@ -23402,13 +23402,33 @@ rs6000_emit_prologue (void)
 
       if ((strategy & SAVE_INLINE_GPRS))
 	{
-	  for (i = 0; i < 32 - info->first_gp_reg_save; i++)
-	    if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save + i))
-	      emit_frame_save (spe_save_area_ptr, reg_mode,
-			       info->first_gp_reg_save + i,
-			       (info->spe_gp_save_offset + save_off
-				+ reg_size * i),
-			       sp_off - save_off);
+        // ppe42 - use 64 bit stores  - No evidence that this gained anything
+        i = 0;
+        if((info->first_gp_reg_save & 0x01) == 1) // odd reg num
+        {
+            if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save))
+	            emit_frame_save (spe_save_area_ptr,
+                                 reg_mode,
+                                 info->first_gp_reg_save,
+	                             (info->spe_gp_save_offset + save_off),
+                        	     sp_off - save_off);
+            i = 1;
+        }
+        for(;i < 32 - info->first_gp_reg_save; i += 2)
+            if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save + i))
+                emit_frame_save (spe_save_area_ptr, DImode,
+                                 info->first_gp_reg_save + i,
+                                 (info->spe_gp_save_offset + save_off
+                                  + reg_size * i),
+                                 sp_off - save_off);
+
+	  //for (i = 0; i < 32 - info->first_gp_reg_save; i++)
+	  //  if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save + i))
+	  //    emit_frame_save (spe_save_area_ptr, reg_mode,
+      //		       info->first_gp_reg_save + i,
+	  //	       (info->spe_gp_save_offset + save_off
+	//			+ reg_size * i),
+	//		       sp_off - save_off);
 	}
       else
 	{
@@ -23489,12 +23509,32 @@ rs6000_emit_prologue (void)
   else if (!WORLD_SAVE_P (info))
     {
       int i;
-      for (i = 0; i < 32 - info->first_gp_reg_save; i++)
-	if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save + i))
-	  emit_frame_save (frame_reg_rtx, reg_mode,
-			   info->first_gp_reg_save + i,
-			   info->gp_save_offset + frame_off + reg_size * i,
-			   sp_off - frame_off);
+
+      // ppe42 save using 64-bit stores
+      i = 0;
+      if((info->first_gp_reg_save & 0x1) == 1) // odd regnum
+      {
+          if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save))
+              emit_frame_save (frame_reg_rtx, reg_mode,
+                               info->first_gp_reg_save,
+                               info->gp_save_offset + frame_off,
+                               sp_off - frame_off);
+          i = 1;
+      }
+      
+      for (; i < 32 - info->first_gp_reg_save; i += 2)
+          if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save + i))
+              emit_frame_save (frame_reg_rtx, DImode,
+                               info->first_gp_reg_save + i,
+                               info->gp_save_offset + frame_off + reg_size * i,
+                               sp_off - frame_off);
+
+//      for (i = 0; i < 32 - info->first_gp_reg_save; i++)
+//	if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save + i))
+//	  emit_frame_save (frame_reg_rtx, reg_mode,
+//			   info->first_gp_reg_save + i,
+//			   info->gp_save_offset + frame_off + reg_size * i,
+//			   sp_off - frame_off);
     }
 
   if (crtl->calls_eh_return)
@@ -24921,12 +24961,46 @@ rs6000_emit_epilogue (int sibcall)
     }
   else
     {
+        // ppe42 - use 64 bit loads
+        i = 0;
+        if((info->first_gp_reg_save & 0x1) == 1) // odd reg
+        {
+            if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save))
+                emit_insn (gen_frame_load
+                           (gen_rtx_REG (reg_mode, info->first_gp_reg_save),
+                            frame_reg_rtx,
+                            info->gp_save_offset + frame_off));
+            i = 1;
+        }
+        reg_mode = DImode;
+        for(; i < 32 - info->first_gp_reg_save; i += 2)
+        {
+	        if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save + i))
+            {
+                emit_insn
+                    (gen_rtx_SET
+                     (VOIDmode,
+                      gen_rtx_REG(reg_mode, info->first_gp_reg_save + i),
+                      gen_frame_mem(reg_mode,
+                                    gen_rtx_PLUS
+                                    (Pmode,
+                                     frame_reg_rtx,
+                                     GEN_INT(info->gp_save_offset +
+                                             frame_off +
+                                             reg_size * i)
+                                    ))));
+
+            }
+        }
+        reg_mode = Pmode;
+/*
       for (i = 0; i < 32 - info->first_gp_reg_save; i++)
 	if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save + i))
 	  emit_insn (gen_frame_load
 		     (gen_rtx_REG (reg_mode, info->first_gp_reg_save + i),
 		      frame_reg_rtx,
 		      info->gp_save_offset + frame_off + reg_size * i));
+              */
     }
 
   if (DEFAULT_ABI == ABI_V4 || flag_shrink_wrap)
@@ -33231,6 +33305,58 @@ emit_fusion_gpr_load (rtx target, rtx mem)
     fatal_insn ("Unable to generate load offset for fusion", load_offset);
 
   return "";
+}
+
+bool mem_contiguous(rtx mem1, rtx mem2)
+{
+    bool result = false;
+    int regno1 = -1;
+    int regno2 = -2;
+
+    int offset1 = -1;
+    int offset2 = -2;
+
+    debug_rtx(mem1);
+    debug_rtx(mem2);
+    int code = GET_CODE(XEXP(mem1,0));
+    if(code == PLUS)
+    {
+        if(GET_CODE(XEXP(XEXP(mem1,0),0)) == REG)
+        {
+            regno1 = REGNO(XEXP(XEXP(mem1,0),0));
+            if ( GET_CODE(XEXP(XEXP(mem1,0),1)) == CONST_INT)
+                offset1 = INTVAL(XEXP(XEXP(mem1,0),1));
+        }
+    }
+    else if (code == REG)
+    {
+        regno1 = REGNO(XEXP(mem1,0));
+        offset1 = 0;
+    }
+
+    code = GET_CODE(XEXP(mem2,0));
+    if(code == PLUS)
+    {
+        if(GET_CODE(XEXP(XEXP(mem2,0),0)) == REG)
+        {
+            regno2 = REGNO(XEXP(XEXP(mem2,0),0));
+            if ( GET_CODE(XEXP(XEXP(mem2,0),1)) == CONST_INT)
+                offset2 = INTVAL(XEXP(XEXP(mem2,0),1));
+        }
+    }
+    else if (code == REG)
+    {
+        regno2 = REGNO(XEXP(mem2,0));
+        offset2 = 0;
+    }
+    if((regno1 == regno2) &&    // same base reg
+       ((offset1 & 0x7) == 0) && // 8 byte aligned
+       ((offset1+4) == offset2)) // contiguous memory
+    {
+        result = true;
+    }
+    fprintf(stderr,"Return %s\n",(result ? "true":"false"));
+    return result;
 }
 
 
