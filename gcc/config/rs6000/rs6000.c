@@ -3849,6 +3849,8 @@ rs6000_option_override_internal (bool global_init_p)
 	break;
 
       case PROCESSOR_PPC405:
+      case PROCESSOR_PPE405:
+      case PROCESSOR_PPE42:
 	rs6000_cost = &ppc405_cost;
 	break;
 
@@ -19147,10 +19149,9 @@ rs6000_emit_cbranch (enum machine_mode mode, rtx operands[])
 
   loc_ref = gen_rtx_LABEL_REF (VOIDmode, operands[3]);
 
-  // TODO if not PPE42
-  // Split the compare and branch if not optimized for size
+  // Split the compare and branch if not PPE42 or not optimized for size
   // or can't meet the constraints of fused compare-branch.
-  if(!optimize_size ||
+  if( (rs6000_cpu != PROCESSOR_PPE42) || !optimize_size ||
      ((GET_CODE (operands[2]) == CONST_INT) &&
      ((INTVAL(operands[2]) < 0) || (INTVAL(operands[2]) > 31))))
   {
@@ -20502,6 +20503,7 @@ rs6000_split_multireg_move (rtx dst, rtx src)
   int nregs;
 
   // if ppe42 then use 64bit load/store
+  if(rs6000_cpu == PROCESSOR_PPE42)
   {
       rtx reg_op = NULL;
       rtx mem_op = NULL;
@@ -23403,32 +23405,38 @@ rs6000_emit_prologue (void)
       if ((strategy & SAVE_INLINE_GPRS))
 	{
         // ppe42 - use 64 bit stores  - No evidence that this gained anything
-        i = 0;
-        if((info->first_gp_reg_save & 0x01) == 1) // odd reg num
+        if(rs6000_cpu == PROCESSOR_PPE42)
         {
-            if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save))
-	            emit_frame_save (spe_save_area_ptr,
-                                 reg_mode,
-                                 info->first_gp_reg_save,
-	                             (info->spe_gp_save_offset + save_off),
-                        	     sp_off - save_off);
-            i = 1;
+      i = 0;
+      if((info->first_gp_reg_save & 0x01) == 1) // odd reg num
+      {
+          if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save))
+	          emit_frame_save (spe_save_area_ptr,
+                               reg_mode,
+                               info->first_gp_reg_save,
+	                           (info->spe_gp_save_offset + save_off),
+                        	    sp_off - save_off);
+             i = 1;
+      }
+      for(;i < 32 - info->first_gp_reg_save; i += 2)
+          if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save + i))
+              emit_frame_save (spe_save_area_ptr, DImode,
+                               info->first_gp_reg_save + i,
+                               (info->spe_gp_save_offset + save_off
+                                + reg_size * i),
+                               sp_off - save_off);
         }
-        for(;i < 32 - info->first_gp_reg_save; i += 2)
-            if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save + i))
-                emit_frame_save (spe_save_area_ptr, DImode,
-                                 info->first_gp_reg_save + i,
-                                 (info->spe_gp_save_offset + save_off
-                                  + reg_size * i),
-                                 sp_off - save_off);
+        else
+        {
 
-	  //for (i = 0; i < 32 - info->first_gp_reg_save; i++)
-	  //  if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save + i))
-	  //    emit_frame_save (spe_save_area_ptr, reg_mode,
-      //		       info->first_gp_reg_save + i,
-	  //	       (info->spe_gp_save_offset + save_off
-	//			+ reg_size * i),
-	//		       sp_off - save_off);
+	  for (i = 0; i < 32 - info->first_gp_reg_save; i++)
+	    if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save + i))
+	      emit_frame_save (spe_save_area_ptr, reg_mode,
+      		       info->first_gp_reg_save + i,
+	  	       (info->spe_gp_save_offset + save_off
+				+ reg_size * i),
+			       sp_off - save_off);
+        }
 	}
       else
 	{
@@ -23511,6 +23519,8 @@ rs6000_emit_prologue (void)
       int i;
 
       // ppe42 save using 64-bit stores
+     if(rs6000_cpu == PROCESSOR_PPE42)
+     {
       i = 0;
       if((info->first_gp_reg_save & 0x1) == 1) // odd regnum
       {
@@ -23528,13 +23538,17 @@ rs6000_emit_prologue (void)
                                info->first_gp_reg_save + i,
                                info->gp_save_offset + frame_off + reg_size * i,
                                sp_off - frame_off);
+     }
+     else
+     {
 
-//      for (i = 0; i < 32 - info->first_gp_reg_save; i++)
-//	if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save + i))
-//	  emit_frame_save (frame_reg_rtx, reg_mode,
-//			   info->first_gp_reg_save + i,
-//			   info->gp_save_offset + frame_off + reg_size * i,
-//			   sp_off - frame_off);
+      for (i = 0; i < 32 - info->first_gp_reg_save; i++)
+	if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save + i))
+	  emit_frame_save (frame_reg_rtx, reg_mode,
+			   info->first_gp_reg_save + i,
+			   info->gp_save_offset + frame_off + reg_size * i,
+			   sp_off - frame_off);
+     }
     }
 
   if (crtl->calls_eh_return)
@@ -24962,6 +24976,8 @@ rs6000_emit_epilogue (int sibcall)
   else
     {
         // ppe42 - use 64 bit loads
+      if(rs6000_cpu == PROCESSOR_PPE42)
+      {
         i = 0;
         if((info->first_gp_reg_save & 0x1) == 1) // odd reg
         {
@@ -24972,7 +24988,6 @@ rs6000_emit_epilogue (int sibcall)
                             info->gp_save_offset + frame_off));
             i = 1;
         }
-        reg_mode = DImode;
         for(; i < 32 - info->first_gp_reg_save; i += 2)
         {
 	        if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save + i))
@@ -24980,8 +24995,8 @@ rs6000_emit_epilogue (int sibcall)
                 emit_insn
                     (gen_rtx_SET
                      (VOIDmode,
-                      gen_rtx_REG(reg_mode, info->first_gp_reg_save + i),
-                      gen_frame_mem(reg_mode,
+                      gen_rtx_REG(DImode, info->first_gp_reg_save + i),
+                      gen_frame_mem(DImode,
                                     gen_rtx_PLUS
                                     (Pmode,
                                      frame_reg_rtx,
@@ -24992,15 +25007,17 @@ rs6000_emit_epilogue (int sibcall)
 
             }
         }
-        reg_mode = Pmode;
-/*
+      }
+      else
+      {
+
       for (i = 0; i < 32 - info->first_gp_reg_save; i++)
 	if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save + i))
 	  emit_insn (gen_frame_load
 		     (gen_rtx_REG (reg_mode, info->first_gp_reg_save + i),
 		      frame_reg_rtx,
 		      info->gp_save_offset + frame_off + reg_size * i));
-              */
+      }
     }
 
   if (DEFAULT_ABI == ABI_V4 || flag_shrink_wrap)
@@ -33316,8 +33333,8 @@ bool mem_contiguous(rtx mem1, rtx mem2)
     int offset1 = -1;
     int offset2 = -2;
 
-    debug_rtx(mem1);
-    debug_rtx(mem2);
+    //debug_rtx(mem1);
+    //debug_rtx(mem2);
     int code = GET_CODE(XEXP(mem1,0));
     if(code == PLUS)
     {
@@ -33355,7 +33372,7 @@ bool mem_contiguous(rtx mem1, rtx mem2)
     {
         result = true;
     }
-    fprintf(stderr,"Return %s\n",(result ? "true":"false"));
+    // fprintf(stderr,"Return %s\n",(result ? "true":"false"));
     return result;
 }
 

@@ -18942,7 +18942,8 @@ and to treat GPRs as 64-bit, doubleword quantities.  GCC defaults to
 Set architecture type, register usage, and
 instruction scheduling parameters for machine type @var{cpu_type}.
 Supported values for @var{cpu_type} are @samp{401}, @samp{403},
-@samp{405}, @samp{405fp}, @samp{440}, @samp{440fp}, @samp{464}, @samp{464fp},
+@samp{405}, @samp{405fp}, @samp{ppe405}, @samp{ppe42}, @samp{440},
+@samp{440fp}, @samp{464}, @samp{464fp},
 @samp{476}, @samp{476fp}, @samp{505}, @samp{601}, @samp{602}, @samp{603},
 @samp{603e}, @samp{604}, @samp{604e}, @samp{620}, @samp{630}, @samp{740},
 @samp{7400}, @samp{7450}, @samp{750}, @samp{801}, @samp{821}, @samp{823},
