@@ -413,6 +413,8 @@ rs6000_cpu_cpp_builtins (cpp_reader *pfile)
   /* Used by lwarx/stwcx. errata work-around.  */
   if (rs6000_cpu == PROCESSOR_PPC405)
     builtin_define ("__PPC405__");
+  if (rs6000_cpu == PROCESSOR_PPE405 || rs6000_cpu == PROCESSOR_PPE42)
+    builtin_define ("__PPE42__");
   /* Used by libstdc++.  */
   if (TARGET_NO_LWSYNC)
     builtin_define ("__NO_LWSYNC__");
