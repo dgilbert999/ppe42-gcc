@@ -1208,6 +1208,11 @@
   return 1;
 })
 
+;; Return 1 of op is "eq","ne" and int is Nlog
+(define_predicate "rs6000_eq_or_ne_operator"
+ (match_code "eq,ne"))
+
+
 ;; Return 1 if OP is a comparison operation that is valid for an SCC insn --
 ;; it must be a positive comparison.
 (define_predicate "scc_comparison_operator"

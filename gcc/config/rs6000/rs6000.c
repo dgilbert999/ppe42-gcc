@@ -19195,7 +19195,7 @@ rs6000_emit_cbranch (enum machine_mode mode, rtx operands[])
 char *
 output_fused_cbranch (rtx operands[], const char *label, rtx insn)
 {
-    static char string[64];
+    static char string[32];
     enum rtx_code code = GET_CODE (operands[1]);
     int need_longbranch = get_attr_length (insn) == 8;
     char *s = string;
@@ -19268,6 +19268,75 @@ output_fused_cbranch (rtx operands[], const char *label, rtx insn)
     return string;
 }
 
+
+char *
+output_fused_bnbwi(rtx operands[], const char *label, bool longbranch)
+{
+    static char string[32];
+    enum rtx_code code = GET_CODE (operands[1]);
+    int regno = REGNO(operands[2]);
+    int bitpos = INTVAL(operands[3]); //31 - exact_log2(INTVAL(operands[3]));
+    char *s = string;
+    int bit_value = 0;
+
+    if(longbranch)
+        code = reverse_condition (code);
+    
+    switch (code)
+    {
+        case NE: // not eq zero so it's 1
+            bit_value = 1;
+            break;
+        case EQ: // eq zero 
+            bit_value = 0;
+            break;
+        default:
+            gcc_unreachable();
+    }
+
+    s += sprintf(s, "bb%dwi %d, %d",
+                 bit_value,
+                 regno,
+                 bitpos);
+    
+    if (longbranch)
+        s += sprintf(s, ",$+8\n\tb %s", label);
+    else
+        s += sprintf(s, ",%s", label);
+
+    return string;
+}
+
+char *
+output_fused_clrbwib(int regno, enum rtx_code code, int bit_pos, const char * label, bool longbranch)
+{
+    static char string[64];
+    char *s = string;
+
+    if(longbranch)
+        code = reverse_condition (code);
+
+    switch(code)
+    {
+        case EQ:
+            s += sprintf(s,"clrbwibz %d, %d",
+                         regno, bit_pos);
+            break;
+        case NE:
+            s += sprintf(s,"clrbwibnz %d, %d",
+                         regno, bit_pos);
+            break;
+        default:
+            gcc_unreachable();
+    }
+
+    if (longbranch)
+        s += sprintf(s, ",$+8\n\tb %s", label);
+    else
+        s += sprintf(s, ",%s", label);
+
+    return string;
+}
 
 char *
 output_cbranch (rtx op, const char *label, int reversed, rtx insn)
