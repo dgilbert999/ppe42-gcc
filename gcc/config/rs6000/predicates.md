@@ -166,6 +166,11 @@
   (and (match_code "const_int")
        (match_test "INTVAL (op) > 0 && exact_log2 (INTVAL (op)) >= 0")))
 
+;; Return 1 if op is a positive constant integer whos inverted value is an exact power of 2.
+(define_predicate "exact_log2_inverted_cint_operand"
+  (and (match_code "const_int")
+       (match_test "(~(INTVAL (op))) > 0 && exact_log2 (~(INTVAL (op))) >= 0")))
+
 ;; Match op = 0 or op = 1.
 (define_predicate "const_0_to_1_operand"
   (and (match_code "const_int")
