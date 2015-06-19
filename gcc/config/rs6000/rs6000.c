@@ -19217,21 +19217,26 @@ output_fused_cbranch (rtx operands[], const char *label, rtx insn)
         case UNEQ:
             ccode = "eq";
             break;
-        case GE:
         case GEU:
+            logical = "l";
+        case GE:
             ccode = "ge";
             break;
-        case GT:
         case GTU:
+            logical = "l";
+        case GT:
         case UNGT:
             ccode = "gt";
             break;
-        case LE:
         case LEU:
+            logical = "l";
+        case LE:
             ccode = "le";
             break;
+        case LTU:
+            logical = "l";
         case LT:
-        case LTU: case UNLT:
+        case UNLT:
             ccode = "lt";
             break;
         default:
@@ -19239,17 +19244,11 @@ output_fused_cbranch (rtx operands[], const char *label, rtx insn)
     }
 
     // Set immediate 
-    // Can't do unsigned(logical) compare on immediate
     if(GET_CODE (operands[3]) == CONST_INT)
     {
         op3 = INTVAL(operands[3]);
         immed = "i";
-    }
-    else if( unsigned_reg_p (operands[2]) &&
-             unsigned_reg_p (operands[3]))
-    {
-        logical = "l";
-        op3 = REGNO(operands[3]);
+        logical = "";  // There is no cmplwib.. instruction in PPE42
     }
     else
     {
