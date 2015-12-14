@@ -1207,6 +1207,10 @@
 {
   if(GET_CODE(XEXP(op,1)) == CONST_INT )
   {
+    if(GET_CODE( op ) == GEU ||
+       GET_CODE( op ) == GTU ||
+       GET_CODE( op ) == LEU ||
+       GET_CODE( op ) == LTU) return 0;
     if((INTVAL(XEXP(op,1)) < 32) && (INTVAL(XEXP(op,1)) >= 0)) return 1;
     else return 0;
   }
