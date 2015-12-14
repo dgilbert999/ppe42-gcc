@@ -19148,12 +19148,14 @@ rs6000_emit_cbranch (enum machine_mode mode, rtx operands[])
   //debug_rtx(loc_ref); // (label_ref 0)
 
   loc_ref = gen_rtx_LABEL_REF (VOIDmode, operands[3]);
+  enum rtx_code code = GET_CODE (operands[0]);
 
   // Split the compare and branch if not PPE42 or not optimized for size
   // or can't meet the constraints of fused compare-branch.
   if( (rs6000_cpu != PROCESSOR_PPE42) || !optimize_size ||
      ((GET_CODE (operands[2]) == CONST_INT) &&
-     ((INTVAL(operands[2]) < 0) || (INTVAL(operands[2]) > 31))))
+     ((INTVAL(operands[2]) < 0) || (INTVAL(operands[2]) > 31) ||
+      code==GTU || code==GEU || code==LTU || code==LEU )))
   {
       condition_rtx = rs6000_generate_compare (operands[0], mode);
 
