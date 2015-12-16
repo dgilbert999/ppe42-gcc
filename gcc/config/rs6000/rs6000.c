@@ -19250,7 +19250,7 @@ output_fused_cbranch (rtx operands[], const char *label, rtx insn)
     {
         op3 = INTVAL(operands[3]);
         immed = "i";
-        logical = "";  // There is no cmplwib.. instruction in PPE42
+        //logical = "";  // There is no cmplwib.. instruction in PPE42
     }
     else
     {
