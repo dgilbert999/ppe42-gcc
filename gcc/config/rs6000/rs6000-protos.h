@@ -226,4 +226,5 @@ extern unsigned char rs6000_hard_regno_nregs[][FIRST_PSEUDO_REGISTER];
 
 extern bool rs6000_linux_float_exceptions_rounding_supported_p (void);
 extern bool mem_contiguous(rtx, rtx);
+extern bool offset_8byte_aligned(rtx);
 #endif  /* rs6000-protos.h */

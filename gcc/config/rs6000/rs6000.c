@@ -20589,9 +20589,10 @@ rs6000_split_multireg_move (rtx dst, rtx src)
           reg_op = src;
       }
       if(reg_op && mem_op &&
-         (GET_MODE (dst) == DImode && GET_MODE (src) == DImode))
+         (GET_MODE (dst) == DImode &&
+          GET_MODE (src) == DImode) &&
+          offset_8byte_aligned(mem_op))
       {
-          // TODO check for alignment on memory
           emit_insn (gen_rtx_SET (DImode, dst, src));
           return;
       }
@@ -33444,6 +33445,26 @@ bool mem_contiguous(rtx mem1, rtx mem2)
     }
     // fprintf(stderr,"Return %s\n",(result ? "true":"false"));
     return result;
+}
+
+// PPE42
+bool offset_8byte_aligned(rtx mem)
+{
+    // Test lvd and stvd cases.
+    // lvdu, stvd, lvdx, stvdx should always be aligned
+    int offset = 0;
+    int code = GET_CODE(XEXP(mem,0));
+    if(code == PLUS)  //lvd stvd
+    {
+        if(GET_CODE(XEXP(XEXP(mem,0),0)) == REG)
+        {
+            if ( GET_CODE(XEXP(XEXP(mem,0),1)) == CONST_INT)
+            {
+                offset = INTVAL(XEXP(XEXP(mem,0),1));
+            }
+        }
+    }
+    return ((offset & 0x7) == 0);
 }
 
 
