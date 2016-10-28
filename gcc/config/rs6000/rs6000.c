@@ -19197,7 +19197,7 @@ rs6000_emit_cbranch (enum machine_mode mode, rtx operands[])
 char *
 output_fused_cbranch (rtx operands[], const char *label, rtx insn)
 {
-    static char string[32];
+    static char string[64];
     enum rtx_code code = GET_CODE (operands[1]);
     int need_longbranch = get_attr_length (insn) == 8;
     char *s = string;
@@ -19273,7 +19273,7 @@ output_fused_cbranch (rtx operands[], const char *label, rtx insn)
 char *
 output_fused_bnbwi(rtx operands[], const char *label, bool longbranch)
 {
-    static char string[32];
+    static char string[64];
     enum rtx_code code = GET_CODE (operands[1]);
     int regno = REGNO(operands[2]);
     int bitpos = INTVAL(operands[3]); //31 - exact_log2(INTVAL(operands[3]));
