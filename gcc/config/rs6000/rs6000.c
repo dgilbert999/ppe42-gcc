@@ -19172,12 +19172,19 @@ rs6000_emit_cbranch (enum machine_mode mode, rtx operands[])
   }
   else // Use the PPE fused compare-branch instructions
   {
-      emit_jump_insn(gen_rtx_SET(VOIDmode,
-                                 pc_rtx,
-                                 gen_rtx_IF_THEN_ELSE(VOIDmode,
-                                                      operands[0],
-                                                      loc_ref,
-                                                      pc_rtx)));
+      rtx cc_clobber = gen_rtx_CLOBBER (CCmode, gen_rtx_REG(CCmode,CR0_REGNO));
+      emit_jump_insn
+          ( gen_rtx_PARALLEL
+            (VOIDmode,
+            gen_rtvec(2,
+                      gen_rtx_SET(VOIDmode,
+                                  pc_rtx,
+                                  gen_rtx_IF_THEN_ELSE(VOIDmode,
+                                                       operands[0],
+                                                       loc_ref,
+                                                       pc_rtx)),
+                      cc_clobber))
+         );
   }
 }
 
@@ -19188,7 +19195,7 @@ rs6000_emit_cbranch (enum machine_mode mode, rtx operands[])
 
    OP is the conditional expression.  XEXP (OP, 0) is assumed to be a
    condition code register and its mode specifies what kind of
-   comparison we made.
+   comparison is being done.
 
    REVERSED is nonzero if we should reverse the sense of the comparison.
 
@@ -19208,7 +19215,7 @@ output_fused_cbranch (rtx operands[], const char *label, rtx insn)
 
     if(need_longbranch)
         code = reverse_condition (code);
-    
+
     switch (code)
     {
         case NE:
@@ -19260,7 +19267,7 @@ output_fused_cbranch (rtx operands[], const char *label, rtx insn)
 
     s += sprintf(s, "cmp%sw%sb%s %d, %d", logical,
                  immed, ccode, REGNO(operands[2]), op3);
-    
+
     if (need_longbranch)
         s += sprintf(s, ",$+8\n\tb %s", label);
     else
@@ -19282,7 +19289,7 @@ output_fused_bnbwi(rtx operands[], const char *label, bool longbranch)
 
     if(longbranch)
         code = reverse_condition (code);
-    
+
     switch (code)
     {
         case NE: // not eq zero so it's 1
@@ -19299,7 +19306,7 @@ output_fused_bnbwi(rtx operands[], const char *label, bool longbranch)
                  bit_value,
                  regno,
                  bitpos);
-    
+
     if (longbranch)
         s += sprintf(s, ",$+8\n\tb %s", label);
     else
