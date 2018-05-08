@@ -3298,14 +3298,14 @@ rs6000_option_override_internal (bool global_init_p)
 
   //if (!BYTES_BIG_ENDIAN && rs6000_cpu != PROCESSOR_PPC750)
   //  {
-      if (TARGET_MULTIPLE)
+    if (TARGET_MULTIPLE)
 	{
 	  rs6000_isa_flags &= ~OPTION_MASK_MULTIPLE;
 	  if ((rs6000_isa_flags_explicit & OPTION_MASK_MULTIPLE) != 0)
 	    warning (0, "-mmultiple is not supported on PPE");
 	}
 
-      if (TARGET_STRING)
+    if (TARGET_STRING)
 	{
 	  rs6000_isa_flags &= ~OPTION_MASK_STRING;
 	  if ((rs6000_isa_flags_explicit & OPTION_MASK_STRING) != 0)
@@ -20841,6 +20841,12 @@ first_reg_to_save (void)
     if (save_reg_p (first_reg))
       break;
 
+  // PPE42 saves GPRs in pairs - always start on even.
+  if((rs6000_cpu == PROCESSOR_PPE42) && ((first_reg % 2) == 1))
+      --first_reg;
+  //if(rs6000_cpu == PROCESSOR_PPE42 && first_reg < 32)
+  //   first_reg = 28;
+
   if (first_reg > RS6000_PIC_OFFSET_TABLE_REGNUM
       && ((DEFAULT_ABI == ABI_V4 && flag_pic != 0)
 	  || (DEFAULT_ABI == ABI_DARWIN && flag_pic)
@@ -21044,15 +21050,18 @@ rs6000_savres_strategy (rs6000_stack_t *info,
   bool lr_save_p;
 
   /* ppe - stmw instruction not supported) */
-  /*if (TARGET_MULTIPLE
+  if (TARGET_MULTIPLE
       && !TARGET_POWERPC64
       && !(TARGET_SPE_ABI && info->spe_64bit_regs_used)
       && info->first_gp_reg_save < 31
-      && !global_regs_p (info->first_gp_reg_save, 32))
-    strategy |= SAVRES_MULTIPLE; */
+      && !global_regs_p (info->first_gp_reg_save, 32)
+      && !(rs6000_cpu == PROCESSOR_PPE42))
+    strategy |= SAVRES_MULTIPLE;
 
-  /* ppe - always inline gpr saves/restores */
-  strategy |= SAVE_INLINE_GPRS | REST_INLINE_GPRS;
+  if(rs6000_cpu == PROCESSOR_PPE42)
+  {
+    strategy |= SAVE_INLINE_GPRS | REST_INLINE_GPRS;
+  }
 
   if (crtl->calls_eh_return
       || cfun->machine->ra_need_lr)
@@ -22956,8 +22965,8 @@ static inline unsigned
 ptr_regno_for_savres (int sel)
 {
   if (DEFAULT_ABI == ABI_AIX || DEFAULT_ABI == ABI_ELFv2)
-    return (sel & SAVRES_REG) == SAVRES_FPR || (sel & SAVRES_LR) ? 1 : 10;
-  return DEFAULT_ABI == ABI_DARWIN && (sel & SAVRES_REG) == SAVRES_FPR ? 1 : 9;
+    return (sel & SAVRES_REG) == SAVRES_FPR || (sel & SAVRES_LR) ? 1 : 12;
+  return DEFAULT_ABI == ABI_DARWIN && (sel & SAVRES_REG) == SAVRES_FPR ? 1 : 11;
 }
 
 /* Construct a parallel rtx describing the effect of a call to an
@@ -23221,7 +23230,7 @@ rs6000_emit_prologue (void)
 		  && info->vrsave_save_offset == -224
 		  && info->altivec_save_offset == -416);
 
-      treg = gen_rtx_REG (SImode, 10);
+      treg = gen_rtx_REG (SImode, 11);
       emit_move_insn (treg, GEN_INT (-info->total_size));
 
       /* SAVE_WORLD takes the caller's LR in R0 and the frame size
@@ -23303,7 +23312,7 @@ rs6000_emit_prologue (void)
       if (info->total_size < 32767)
 	frame_off = info->total_size;
       else if (need_r11)
-	ptr_regno = 9;
+	ptr_regno = 11;
       else if (info->cr_save_p
 	       || info->lr_save_p
 	       || info->first_fp_reg_save < 64
@@ -23311,7 +23320,7 @@ rs6000_emit_prologue (void)
 	       || info->altivec_size != 0
 	       || info->vrsave_mask != 0
 	       || crtl->calls_eh_return)
-	ptr_regno = 10;
+	ptr_regno = 12;
       else
 	{
 	  /* The prologue won't be saving any regs so there is no need
@@ -23373,11 +23382,11 @@ rs6000_emit_prologue (void)
   cr_save_regno = ((DEFAULT_ABI == ABI_AIX || DEFAULT_ABI == ABI_ELFv2)
 		   && !(strategy & (SAVE_INLINE_GPRS
 				    | SAVE_NOINLINE_GPRS_SAVES_LR))
-		   ? 9 : 10);
+		   ? 11 : 12);
   if (!WORLD_SAVE_P (info)
       && info->cr_save_p
       && REGNO (frame_reg_rtx) != cr_save_regno
-      && !(using_static_chain_p && cr_save_regno == 9))
+      && !(using_static_chain_p && cr_save_regno == 11))
     {
       cr_save_rtx = gen_rtx_REG (SImode, cr_save_regno);
       START_USE (cr_save_regno);
@@ -23459,7 +23468,7 @@ rs6000_emit_prologue (void)
 	  if (!(strategy & SAVE_INLINE_GPRS))
 	    ool_adjust = 8 * (info->first_gp_reg_save - FIRST_SAVED_GP_REGNO);
 	  offset = info->spe_gp_save_offset + frame_off - ool_adjust;
-	  spe_save_area_ptr = gen_rtx_REG (Pmode, 9);
+	  spe_save_area_ptr = gen_rtx_REG (Pmode, 11);
 	  save_off = frame_off - offset;
 
 	  if (using_static_chain_p)
@@ -23471,50 +23480,24 @@ rs6000_emit_prologue (void)
 
 	      emit_move_insn (r0, spe_save_area_ptr);
 	    }
-	  else if (REGNO (frame_reg_rtx) != 9)
-	    START_USE (9);
+	  else if (REGNO (frame_reg_rtx) != 11)
+	    START_USE (11);
 
 	  emit_insn (gen_addsi3 (spe_save_area_ptr,
 				 frame_reg_rtx, GEN_INT (offset)));
-	  if (!using_static_chain_p && REGNO (frame_reg_rtx) == 9)
+	  if (!using_static_chain_p && REGNO (frame_reg_rtx) == 11)
 	    frame_off = -info->spe_gp_save_offset + ool_adjust;
 	}
 
       if ((strategy & SAVE_INLINE_GPRS))
 	{
-        // ppe42 - use 64 bit stores  - No evidence that this gained anything
-        if(rs6000_cpu == PROCESSOR_TITAN) // TODO disable for now PROCESSOR_PPE42)
-        {
-      i = 0;
-      if((info->first_gp_reg_save & 0x01) == 1) // odd reg num
-      {
-          if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save))
-	          emit_frame_save (spe_save_area_ptr,
-                               reg_mode,
-                               info->first_gp_reg_save,
-	                           (info->spe_gp_save_offset + save_off),
-                        	    sp_off - save_off);
-             i = 1;
-      }
-      for(;i < 32 - info->first_gp_reg_save; i += 2)
-          if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save + i))
-              emit_frame_save (spe_save_area_ptr, DImode,
-                               info->first_gp_reg_save + i,
-                               (info->spe_gp_save_offset + save_off
-                                + reg_size * i),
-                               sp_off - save_off);
-        }
-        else
-        {
-
 	  for (i = 0; i < 32 - info->first_gp_reg_save; i++)
 	    if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save + i))
 	      emit_frame_save (spe_save_area_ptr, reg_mode,
-      		       info->first_gp_reg_save + i,
-	  	       (info->spe_gp_save_offset + save_off
+			       info->first_gp_reg_save + i,
+			       (info->spe_gp_save_offset + save_off
 				+ reg_size * i),
 			       sp_off - save_off);
-        }
 	}
       else
 	{
@@ -23535,8 +23518,8 @@ rs6000_emit_prologue (void)
 	      emit_move_insn (spe_save_area_ptr, gen_rtx_REG (Pmode, 0));
 	      END_USE (0);
 	    }
-	  else if (REGNO (frame_reg_rtx) != 9)
-	    END_USE (9);
+	  else if (REGNO (frame_reg_rtx) != 11)
+	    END_USE (11);
 	}
     }
   else if (!WORLD_SAVE_P (info) && !(strategy & SAVE_INLINE_GPRS))
@@ -23594,29 +23577,84 @@ rs6000_emit_prologue (void)
     }
   else if (!WORLD_SAVE_P (info))
     {
-      int i;
+      int i = 0;
+      if(rs6000_cpu == PROCESSOR_PPE42)
+      {
+          if(info->first_gp_reg_save == 28)
+          {
+              rtvec p;
+              p = rtvec_alloc (2);
+              i = 0;
+              RTVEC_ELT (p, i)
+                  = gen_frame_store (gen_rtx_REG (reg_mode, info->first_gp_reg_save),
+                                     frame_reg_rtx,
+                                     info->gp_save_offset + frame_off);
 
+              i = 1;
+              RTVEC_ELT (p, i)
+                  = gen_frame_store (gen_rtx_REG (reg_mode, info->first_gp_reg_save + i),
+                                     frame_reg_rtx,
+                                     info->gp_save_offset + frame_off + reg_size*i);
+
+              insn = emit_insn (gen_rtx_PARALLEL (VOIDmode, p));
+              rs6000_frame_related (insn,
+                                    frame_reg_rtx, sp_off - frame_off,
+                                    NULL_RTX,
+                                    NULL_RTX,
+                                    NULL_RTX);
+              i = 2;
+          }
+
+          if(info->first_gp_reg_save < 31)
+          {
+              rtvec p;
+              p = rtvec_alloc (2);
+              RTVEC_ELT (p, 0)
+                  = gen_frame_store (gen_rtx_REG (reg_mode, 30),
+                                     frame_reg_rtx,
+                                     info->gp_save_offset + frame_off + reg_size*i);
+
+              RTVEC_ELT (p, 1)
+                  = gen_frame_store (gen_rtx_REG (reg_mode, 31),
+                                     frame_reg_rtx,
+                                     info->gp_save_offset + frame_off + reg_size*(i+1));
+
+              insn = emit_insn (gen_rtx_PARALLEL (VOIDmode, p));
+              rs6000_frame_related (insn,
+                                    frame_reg_rtx, sp_off - frame_off,
+                                    NULL_RTX,
+                                    NULL_RTX,
+                                    NULL_RTX);
+          }
+      }
+#if defined(__OLD_WAY__)
       // ppe42 save using 64-bit stores
-     if(rs6000_cpu == PROCESSOR_TITAN) // TODO disable for now PROCESSOR_PPE42)
+      // If PPE42 64 bit stores are used then if optimization removes the even reg,
+      // but not the odd one then the odd one is not saved/restored.
+      //
+      // puts asm out too soon in FILE
+     // frame_reg_rtx is stack or frmae pointer rtx (r1)
+     if(rs6000_cpu == PROCESSOR_PPE42)
      {
       i = 0;
       if((info->first_gp_reg_save & 0x1) == 1) // odd regnum
       {
-          if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save))
-              emit_frame_save (frame_reg_rtx, reg_mode,
-                               info->first_gp_reg_save,
-                               info->gp_save_offset + frame_off,
-                               sp_off - frame_off);
+          emit_frame_save (frame_reg_rtx, reg_mode,
+                           info->first_gp_reg_save,
+                           info->gp_save_offset + frame_off,
+                           sp_off - frame_off);
           i = 1;
       }
-      
+
       for (; i < 32 - info->first_gp_reg_save; i += 2)
-          if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save + i))
+          if ((rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save + i)) ||
+              (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save + i + 1)))
               emit_frame_save (frame_reg_rtx, DImode,
                                info->first_gp_reg_save + i,
                                info->gp_save_offset + frame_off + reg_size * i,
                                sp_off - frame_off);
      }
+#endif
      else
      {
 
@@ -23669,15 +23707,15 @@ rs6000_emit_prologue (void)
       rtx save_insn, join_insn, note;
       long toc_restore_insn;
 
-      tmp_reg = gen_rtx_REG (Pmode, 9);
-      tmp_reg_si = gen_rtx_REG (SImode, 9);
+      tmp_reg = gen_rtx_REG (Pmode, 11);
+      tmp_reg_si = gen_rtx_REG (SImode, 11);
       if (using_static_chain_p)
 	{
 	  START_USE (0);
 	  emit_move_insn (gen_rtx_REG (Pmode, 0), tmp_reg);
 	}
       else
-	START_USE (9);
+	START_USE (11);
       emit_move_insn (tmp_reg, gen_rtx_REG (Pmode, LR_REGNO));
       /* Peek at instruction to which this function returns.  If it's
 	 restoring r2, then we know we've already saved r2.  We can't
@@ -23736,7 +23774,7 @@ rs6000_emit_prologue (void)
 	  END_USE (0);
 	}
       else
-	END_USE (9);
+	END_USE (11);
     }
 
   /* Save CR if we use any that must be preserved.  */
@@ -23923,7 +23961,7 @@ rs6000_emit_prologue (void)
       int scratch_regno = ptr_regno_for_savres (SAVRES_SAVE | SAVRES_VR);
       rtx scratch_reg = gen_rtx_REG (Pmode, scratch_regno);
 
-      gcc_checking_assert (scratch_regno == 9 || scratch_regno == 10);
+      gcc_checking_assert (scratch_regno == 11 || scratch_regno == 12);
       NOT_INUSE (0);
       if (end_save + frame_off != 0)
 	{
@@ -24007,13 +24045,13 @@ rs6000_emit_prologue (void)
       /* Get VRSAVE onto a GPR.  Note that ABI_V4 and ABI_DARWIN might
 	 be using r12 as frame_reg_rtx and r11 as the static chain
 	 pointer for nested functions.  */
-      save_regno = 10;
+      save_regno = 12;
       if ((DEFAULT_ABI == ABI_AIX || DEFAULT_ABI == ABI_ELFv2)
 	  && !using_static_chain_p)
-	save_regno = 9;
-      else if (REGNO (frame_reg_rtx) == 10)
+	save_regno = 11;
+      else if (REGNO (frame_reg_rtx) == 12)
 	{
-	  save_regno = 9;
+	  save_regno = 11;
 	  if (using_static_chain_p)
 	    save_regno = 0;
 	}
@@ -24479,7 +24517,7 @@ rs6000_emit_epilogue (int sibcall)
       /* The instruction pattern requires a clobber here;
 	 it is shared with the restVEC helper. */
       RTVEC_ELT (p, j++)
-	= gen_rtx_CLOBBER (VOIDmode, gen_rtx_REG (Pmode, 9));
+	= gen_rtx_CLOBBER (VOIDmode, gen_rtx_REG (Pmode, 11));
 
       {
 	/* CR register traditionally saved as CR2.  */
@@ -24559,16 +24597,16 @@ rs6000_emit_epilogue (int sibcall)
       int i;
       int scratch_regno = ptr_regno_for_savres (SAVRES_VR);
 
-      gcc_checking_assert (scratch_regno == 9 || scratch_regno == 10);
+      gcc_checking_assert (scratch_regno == 11 || scratch_regno == 12);
       if (use_backchain_to_restore_sp)
 	{
-	  int frame_regno = 9;
+	  int frame_regno = 11;
 
 	  if ((strategy & REST_INLINE_VRS) == 0)
 	    {
 	      /* Of r11 and r12, select the one not clobbered by an
 		 out-of-line restore function for the frame register.  */
-	      frame_regno = 9 + 10 - scratch_regno;
+	      frame_regno = 11 + 12 - scratch_regno;
 	    }
 	  frame_reg_rtx = gen_rtx_REG (Pmode, frame_regno);
 	  emit_move_insn (frame_reg_rtx,
@@ -24648,7 +24686,7 @@ rs6000_emit_epilogue (int sibcall)
 	{
 	  if (use_backchain_to_restore_sp)
 	    {
-	      frame_reg_rtx = gen_rtx_REG (Pmode, 9);
+	      frame_reg_rtx = gen_rtx_REG (Pmode, 11);
 	      emit_move_insn (frame_reg_rtx,
 			      gen_rtx_MEM (Pmode, sp_reg_rtx));
 	      frame_off = 0;
@@ -24657,7 +24695,7 @@ rs6000_emit_epilogue (int sibcall)
 	    frame_reg_rtx = hard_frame_pointer_rtx;
 	}
 
-      reg = gen_rtx_REG (SImode, 10);
+      reg = gen_rtx_REG (SImode, 12);
       emit_insn (gen_frame_load (reg, frame_reg_rtx,
 				 info->vrsave_save_offset + frame_off));
 
@@ -24674,7 +24712,12 @@ rs6000_emit_epilogue (int sibcall)
 	  /* Under V.4, don't reset the stack pointer until after we're done
 	     loading the saved registers.  */
 	  if (DEFAULT_ABI == ABI_V4)
-	    frame_reg_rtx = gen_rtx_REG (Pmode, 9);
+      {
+      if(rs6000_cpu == PROCESSOR_PPE42)
+          frame_reg_rtx = gen_rtx_REG (Pmode, 10);
+      else
+          frame_reg_rtx = gen_rtx_REG(Pmode, 11);
+      }
 
 	  insn = emit_move_insn (frame_reg_rtx,
 				 gen_rtx_MEM (Pmode, sp_reg_rtx));
@@ -24696,7 +24739,12 @@ rs6000_emit_epilogue (int sibcall)
     {
       frame_reg_rtx = sp_reg_rtx;
       if (DEFAULT_ABI == ABI_V4)
-	frame_reg_rtx = gen_rtx_REG (Pmode, 9);
+      {
+          if(rs6000_cpu == PROCESSOR_PPE42)
+	    frame_reg_rtx = gen_rtx_REG (Pmode, 10);
+          else
+              frame_reg_rtx = gen_rtx_REG(Pmode, 11);
+      }
       /* Prevent reordering memory accesses against stack pointer restore.  */
       else if (cfun->calls_alloca
 	       || offset_below_red_zone_p (-info->total_size))
@@ -24891,7 +24939,7 @@ rs6000_emit_epilogue (int sibcall)
   /* Get the old cr if we saved it.  */
   if (info->cr_save_p)
     {
-      unsigned cr_save_regno = 10;
+      unsigned cr_save_regno = 12;
 
       if (!restoring_GPRs_inline)
 	{
@@ -24901,12 +24949,12 @@ rs6000_emit_epilogue (int sibcall)
 	  int sel = SAVRES_GPR | (lr ? SAVRES_LR : 0);
 	  int gpr_ptr_regno = ptr_regno_for_savres (sel);
 
-	  if (gpr_ptr_regno == 10)
-	    cr_save_regno = 9;
+	  if (gpr_ptr_regno == 12)
+	    cr_save_regno = 11;
 	  gcc_checking_assert (REGNO (frame_reg_rtx) != cr_save_regno);
 	}
-      else if (REGNO (frame_reg_rtx) == 10)
-	cr_save_regno = 9;
+      else if (REGNO (frame_reg_rtx) == 12)
+	cr_save_regno = 11;
 
       cr_save_reg = load_cr_save (cr_save_regno, frame_reg_rtx,
 				  info->cr_save_offset + frame_off,
@@ -24971,7 +25019,11 @@ rs6000_emit_epilogue (int sibcall)
 
 	  if (!restoring_GPRs_inline)
 	    ool_adjust = 8 * (info->first_gp_reg_save - FIRST_SAVED_GP_REGNO);
-	  frame_reg_rtx = gen_rtx_REG (Pmode, 9);
+    if(rs6000_cpu == PROCESSOR_PPE42)
+	    frame_reg_rtx = gen_rtx_REG (Pmode, 10);
+    else
+      frame_reg_rtx = gen_rtx_REG (Pmode, 11);
+
 	  emit_insn (gen_addsi3 (frame_reg_rtx, old_frame_reg_rtx,
 				 GEN_INT (info->spe_gp_save_offset
 					  + frame_off
@@ -25053,22 +25105,56 @@ rs6000_emit_epilogue (int sibcall)
     }
   else
     {
+        int i = 0;
+        if(rs6000_cpu == PROCESSOR_PPE42)
+        {
+            if(info->first_gp_reg_save == 28)
+            {
+                rtvec p;
+                p = rtvec_alloc(2);
+                RTVEC_ELT (p, 0)
+                    = gen_frame_load (gen_rtx_REG (reg_mode, 28),
+                                      frame_reg_rtx,
+                                      info->gp_save_offset + frame_off);
+                RTVEC_ELT (p, 1)
+                    = gen_frame_load (gen_rtx_REG (reg_mode, 29),
+                                      frame_reg_rtx,
+                                      info->gp_save_offset + frame_off + reg_size);
+                emit_insn (gen_rtx_PARALLEL (VOIDmode, p));
+                i = 2;
+            }
+            if(info->first_gp_reg_save < 31)
+            {
+                rtvec p;
+                p = rtvec_alloc(2);
+                RTVEC_ELT (p, 0)
+                    = gen_frame_load (gen_rtx_REG (reg_mode, 30),
+                                      frame_reg_rtx,
+                                      info->gp_save_offset + frame_off + reg_size*i);
+                RTVEC_ELT (p, 1)
+                    = gen_frame_load (gen_rtx_REG (reg_mode, 31),
+                                      frame_reg_rtx,
+                                      info->gp_save_offset + frame_off + reg_size*(i+1));
+                emit_insn (gen_rtx_PARALLEL (VOIDmode, p));
+            }
+        }
+#if defined(__OLD_WAY__)
         // ppe42 - use 64 bit loads
-      if(rs6000_cpu == PROCESSOR_TITAN) // TODO turn off PROCESSOR_PPE42)
+      if(rs6000_cpu == PROCESSOR_PPE42)
       {
         i = 0;
         if((info->first_gp_reg_save & 0x1) == 1) // odd reg
         {
-            if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save))
-                emit_insn (gen_frame_load
-                           (gen_rtx_REG (reg_mode, info->first_gp_reg_save),
-                            frame_reg_rtx,
-                            info->gp_save_offset + frame_off));
+            emit_insn (gen_frame_load
+                       (gen_rtx_REG (reg_mode, info->first_gp_reg_save),
+                        frame_reg_rtx,
+                        info->gp_save_offset + frame_off));
             i = 1;
         }
         for(; i < 32 - info->first_gp_reg_save; i += 2)
         {
-	        if (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save + i))
+	        if ((rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save + i)) ||
+              (rs6000_reg_live_or_pic_offset_p (info->first_gp_reg_save + i + 1)))
             {
                 emit_insn
                     (gen_rtx_SET
@@ -25086,6 +25172,7 @@ rs6000_emit_epilogue (int sibcall)
             }
         }
       }
+#endif
       else
       {
 
@@ -25258,7 +25345,7 @@ rs6000_emit_epilogue (int sibcall)
 	  sym = rs6000_savres_routine_sym (info,
 					   SAVRES_FPR | (lr ? SAVRES_LR : 0));
 	  RTVEC_ELT (p, 2) = gen_rtx_USE (VOIDmode, sym);
-	  reg = (DEFAULT_ABI == ABI_AIX || DEFAULT_ABI == ABI_ELFv2)? 1 : 10;
+	  reg = (DEFAULT_ABI == ABI_AIX || DEFAULT_ABI == ABI_ELFv2)? 1 : 11;
 	  RTVEC_ELT (p, 3) = gen_rtx_USE (VOIDmode, gen_rtx_REG (Pmode, reg));
 
 	  for (i = 0; i < 64 - info->first_fp_reg_save; i++)
@@ -26458,32 +26545,32 @@ output_function_profiler (FILE *file, int labelno)
 	      asm_fprintf (file, "\tbl %s\n\tb 1f\n\t.long ", name);
 	      assemble_name (file, buf);
 	      fputs ("-.\n1:", file);
-	      asm_fprintf (file, "\tmflr %s\n", reg_names[9]);
+	      asm_fprintf (file, "\tmflr %s\n", reg_names[11]);
 	      asm_fprintf (file, "\taddi %s,%s,4\n",
-			   reg_names[9], reg_names[9]);
+			   reg_names[11], reg_names[11]);
 	    }
 	  else
 	    {
 	      fputs ("\tbcl 20,31,1f\n\t.long ", file);
 	      assemble_name (file, buf);
 	      fputs ("-.\n1:", file);
-	      asm_fprintf (file, "\tmflr %s\n", reg_names[9]);
+	      asm_fprintf (file, "\tmflr %s\n", reg_names[11]);
 	    }
 	  asm_fprintf (file, "\tlwz %s,0(%s)\n",
-		       reg_names[0], reg_names[9]);
+		       reg_names[0], reg_names[11]);
 	  asm_fprintf (file, "\tadd %s,%s,%s\n",
-		       reg_names[0], reg_names[0], reg_names[9]);
+		       reg_names[0], reg_names[0], reg_names[11]);
 	}
       else
 	{
-	  asm_fprintf (file, "\tlis %s,", reg_names[10]);
+	  asm_fprintf (file, "\tlis %s,", reg_names[12]);
 	  assemble_name (file, buf);
 	  fputs ("@ha\n", file);
 	  asm_fprintf (file, "\tstw %s,4(%s)\n",
 		       reg_names[0], reg_names[1]);
 	  asm_fprintf (file, "\tla %s,", reg_names[0]);
 	  assemble_name (file, buf);
-	  asm_fprintf (file, "@l(%s)\n", reg_names[10]);
+	  asm_fprintf (file, "@l(%s)\n", reg_names[12]);
 	}
 
       /* ABI_V4 saves the static chain reg with ASM_OUTPUT_REG_PUSH.  */
@@ -29045,7 +29132,7 @@ macho_branch_islands (void)
 	      strcat (tmp_buf, name);
 	      strcat (tmp_buf, "\n");
 	      strcat (tmp_buf, label);
-	      strcat (tmp_buf, "_pic:\n\tmflr r9\n");
+	      strcat (tmp_buf, "_pic:\n\tmflr r11\n");
 	    }
 	  else
 	    {
@@ -29053,10 +29140,10 @@ macho_branch_islands (void)
 	      strcat (tmp_buf, label);
 	      strcat (tmp_buf, "_pic\n");
 	      strcat (tmp_buf, label);
-	      strcat (tmp_buf, "_pic:\n\tmflr r9\n");
+	      strcat (tmp_buf, "_pic:\n\tmflr r11\n");
 	    }
 
-	  strcat (tmp_buf, "\taddis r9,r9,ha16(");
+	  strcat (tmp_buf, "\taddis r11,r11,ha16(");
 	  strcat (tmp_buf, name_buf);
 	  strcat (tmp_buf, " - ");
 	  strcat (tmp_buf, label);
@@ -29064,21 +29151,21 @@ macho_branch_islands (void)
 
 	  strcat (tmp_buf, "\tmtlr r0\n");
 
-	  strcat (tmp_buf, "\taddi r10,r9,lo16(");
+	  strcat (tmp_buf, "\taddi r12,r11,lo16(");
 	  strcat (tmp_buf, name_buf);
 	  strcat (tmp_buf, " - ");
 	  strcat (tmp_buf, label);
 	  strcat (tmp_buf, "_pic)\n");
 
-	  strcat (tmp_buf, "\tmtctr r10\n\tbctr\n");
+	  strcat (tmp_buf, "\tmtctr r12\n\tbctr\n");
 	}
       else
 	{
-	  strcat (tmp_buf, ":\nlis r10,hi16(");
+	  strcat (tmp_buf, ":\nlis r12,hi16(");
 	  strcat (tmp_buf, name_buf);
-	  strcat (tmp_buf, ")\n\tori r10,r10,lo16(");
+	  strcat (tmp_buf, ")\n\tori r12,r12,lo16(");
 	  strcat (tmp_buf, name_buf);
-	  strcat (tmp_buf, ")\n\tmtctr r10\n\tbctr");
+	  strcat (tmp_buf, ")\n\tmtctr r12\n\tbctr");
 	}
       output_asm_insn (tmp_buf, 0);
 #if defined (DBX_DEBUGGING_INFO) || defined (XCOFF_DEBUGGING_INFO)
@@ -29205,20 +29292,20 @@ machopic_output_stub (FILE *file, const char *symb, const char *stub)
 	  char name[32];
 	  get_ppc476_thunk_name (name);
 	  fprintf (file, "\tbl %s\n", name);
-	  fprintf (file, "%s:\n\tmflr r9\n", local_label_0);
+	  fprintf (file, "%s:\n\tmflr r11\n", local_label_0);
 	}
       else
 	{
 	  fprintf (file, "\tbcl 20,31,%s\n", local_label_0);
-	  fprintf (file, "%s:\n\tmflr r9\n", local_label_0);
+	  fprintf (file, "%s:\n\tmflr r11\n", local_label_0);
 	}
-      fprintf (file, "\taddis r9,r9,ha16(%s-%s)\n",
+      fprintf (file, "\taddis r11,r11,ha16(%s-%s)\n",
 	       lazy_ptr_name, local_label_0);
       fprintf (file, "\tmtlr r0\n");
-      fprintf (file, "\t%s r10,lo16(%s-%s)(r9)\n",
+      fprintf (file, "\t%s r12,lo16(%s-%s)(r11)\n",
 	       (TARGET_64BIT ? "ldu" : "lwzu"),
 	       lazy_ptr_name, local_label_0);
-      fprintf (file, "\tmtctr r10\n");
+      fprintf (file, "\tmtctr r12\n");
       fprintf (file, "\tbctr\n");
     }
   else
@@ -29228,11 +29315,11 @@ machopic_output_stub (FILE *file, const char *symb, const char *stub)
       fprintf (file, "%s:\n", stub);
       fprintf (file, "\t.indirect_symbol %s\n", symbol_name);
 
-      fprintf (file, "\tlis r9,ha16(%s)\n", lazy_ptr_name);
-      fprintf (file, "\t%s r10,lo16(%s)(r9)\n",
+      fprintf (file, "\tlis r11,ha16(%s)\n", lazy_ptr_name);
+      fprintf (file, "\t%s r12,lo16(%s)(r11)\n",
 	       (TARGET_64BIT ? "ldu" : "lwzu"),
 	       lazy_ptr_name);
-      fprintf (file, "\tmtctr r10\n");
+      fprintf (file, "\tmtctr r12\n");
       fprintf (file, "\tbctr\n");
     }
 

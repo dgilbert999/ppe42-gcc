@@ -1240,6 +1240,80 @@
   (and (match_operand 0 "branch_comparison_operator")
        (match_code "eq,lt,gt,ltu,gtu,unordered")))
 
+;; Return 1 if OP is a lvd operation, as a PARALLEL.
+(define_predicate "lvd_operation"
+  (match_code "parallel")
+{
+  int count = XVECLEN (op, 0);
+  unsigned int dest_regno;
+  rtx  src_addr;
+  unsigned int base_regno;
+  HOST_WIDE_INT offset;
+  int i;
+
+  if (count != 2
+      || GET_CODE (XVECEXP (op, 0, 0)) != SET
+      || GET_CODE (SET_DEST (XVECEXP (op, 0, 0))) != REG
+      || GET_CODE (SET_SRC (XVECEXP (op, 0, 0))) != MEM)
+    return 0;
+
+  dest_regno = REGNO (SET_DEST (XVECEXP (op, 0, 0)));
+  src_addr = XEXP (SET_SRC (XVECEXP (op, 0, 0)), 0);
+
+  if (dest_regno > 30 || (dest_regno % 2))
+    return 0;
+
+  if (legitimate_indirect_address_p (src_addr, 0))
+    {
+      offset = 0;
+      base_regno = REGNO (src_addr);
+      if (base_regno == 0)
+	return 0;
+    }
+  else if (rs6000_legitimate_offset_address_p (SImode, src_addr, false, false))
+    {
+      offset = INTVAL (XEXP (src_addr, 1));
+      base_regno = REGNO (XEXP (src_addr, 0));
+    }
+  else
+    return 0;
+
+  for (i = 0; i < count; i++)
+    {
+      rtx elt = XVECEXP (op, 0, i);
+      rtx newaddr;
+      rtx addr_reg;
+      HOST_WIDE_INT newoffset;
+
+      if (GET_CODE (elt) != SET
+	  || GET_CODE (SET_DEST (elt)) != REG
+	  || GET_MODE (SET_DEST (elt)) != SImode
+	  || REGNO (SET_DEST (elt)) != dest_regno + i
+	  || GET_CODE (SET_SRC (elt)) != MEM
+	  || GET_MODE (SET_SRC (elt)) != SImode)
+	return 0;
+      newaddr = XEXP (SET_SRC (elt), 0);
+      if (legitimate_indirect_address_p (newaddr, 0))
+	{
+	  newoffset = 0;
+	  addr_reg = newaddr;
+	}
+      else if (rs6000_legitimate_offset_address_p (SImode, newaddr, false, false))
+	{
+	  addr_reg = XEXP (newaddr, 0);
+	  newoffset = INTVAL (XEXP (newaddr, 1));
+	}
+      else
+	return 0;
+      if (REGNO (addr_reg) != base_regno
+	  || newoffset != offset + 4 * i)
+	return 0;
+    }
+
+  return 1;
+})
+
+
 ;; Return 1 if OP is a load multiple operation, known to be a PARALLEL.
 (define_predicate "load_multiple_operation"
   (match_code "parallel")
@@ -1698,6 +1772,80 @@
 
   if (src_regno > 31
       || count != 32 - (int) src_regno)
+    return 0;
+
+  if (legitimate_indirect_address_p (dest_addr, 0))
+    {
+      offset = 0;
+      base_regno = REGNO (dest_addr);
+      if (base_regno == 0)
+	return 0;
+    }
+  else if (rs6000_legitimate_offset_address_p (SImode, dest_addr, false, false))
+    {
+      offset = INTVAL (XEXP (dest_addr, 1));
+      base_regno = REGNO (XEXP (dest_addr, 0));
+    }
+  else
+    return 0;
+
+  for (i = 0; i < count; i++)
+    {
+      rtx elt = XVECEXP (op, 0, i);
+      rtx newaddr;
+      rtx addr_reg;
+      HOST_WIDE_INT newoffset;
+
+      if (GET_CODE (elt) != SET
+	  || GET_CODE (SET_SRC (elt)) != REG
+	  || GET_MODE (SET_SRC (elt)) != SImode
+	  || REGNO (SET_SRC (elt)) != src_regno + i
+	  || GET_CODE (SET_DEST (elt)) != MEM
+	  || GET_MODE (SET_DEST (elt)) != SImode)
+	return 0;
+      newaddr = XEXP (SET_DEST (elt), 0);
+      if (legitimate_indirect_address_p (newaddr, 0))
+	{
+	  newoffset = 0;
+	  addr_reg = newaddr;
+	}
+      else if (rs6000_legitimate_offset_address_p (SImode, newaddr, false, false))
+	{
+	  addr_reg = XEXP (newaddr, 0);
+	  newoffset = INTVAL (XEXP (newaddr, 1));
+	}
+      else
+	return 0;
+      if (REGNO (addr_reg) != base_regno
+	  || newoffset != offset + 4 * i)
+	return 0;
+    }
+
+  return 1;
+})
+;; Return 1 if OP is valid for stmw insn, as a PARALLEL.
+(define_predicate "stvd_operation"
+  (match_code "parallel")
+{
+  int count = XVECLEN (op, 0);
+  unsigned int src_regno;
+  rtx dest_addr;
+  unsigned int base_regno;
+  HOST_WIDE_INT offset;
+  int i;
+
+  /* Perform a quick check so we don't blow up below.  */
+  if (count != 2
+      || GET_CODE (XVECEXP (op, 0, 0)) != SET
+      || GET_CODE (SET_DEST (XVECEXP (op, 0, 0))) != MEM
+      || GET_CODE (SET_SRC (XVECEXP (op, 0, 0))) != REG)
+    return 0;
+
+  src_regno = REGNO (SET_SRC (XVECEXP (op, 0, 0)));
+  dest_addr = XEXP (SET_DEST (XVECEXP (op, 0, 0)), 0);
+
+  if (src_regno > 30
+      || (src_regno % 2))
     return 0;
 
   if (legitimate_indirect_address_p (dest_addr, 0))

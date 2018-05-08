@@ -1305,7 +1305,7 @@ enum data_align { align_abi, align_opt, align_both };
 #define ARG_POINTER_REGNUM 67
 
 /* Place to put static chain when calling a function that requires it.  */
-#define STATIC_CHAIN_REGNUM 10
+#define STATIC_CHAIN_REGNUM 11
 
 
 /* Define the classes of registers for register constraints in the
@@ -1407,9 +1407,9 @@ enum reg_class
   /* NO_REGS.  */							\
   { 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000 },	\
   /* BASE_REGS.  */							\
-  { 0xf00027fe, 0x00000000, 0x00000008, 0x00020000, 0x00000000 },	\
+  { 0xf0002ffe, 0x00000000, 0x00000008, 0x00020000, 0x00000000 },	\
   /* GENERAL_REGS.  */							\
-  { 0xf00027ff, 0x00000000, 0x00000008, 0x00020000, 0x00000000 },	\
+  { 0xf0002fff, 0x00000000, 0x00000008, 0x00020000, 0x00000000 },	\
   /* FLOAT_REGS.  */							\
   { 0x00000000, 0xffffffff, 0x00000000, 0x00000000, 0x00000000 },	\
   /* ALTIVEC_REGS.  */							\
