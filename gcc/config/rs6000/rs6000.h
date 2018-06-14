@@ -511,6 +511,10 @@ extern int rs6000_vector_align[];
 #define TARGET_E500_DOUBLE 0
 #define CHECK_E500_OPTIONS do { } while (0)
 
+#define TARGET_PPE42A (rs6000_cpu == PROCESSOR_PPE42)
+#define TARGET_PPE42X (rs6000_cpu == PROCESSOR_PPE42X)
+#define TARGET_PPE (TARGET_PPE42A || TARGET_PPE42X)
+
 /* ISA 2.01 allowed FCFID to be done in 32-bit, previously it was 64-bit only.
    Enable 32-bit fcfid's on any of the switches for newer ISA machines or
    XILINX.  */
@@ -982,10 +986,10 @@ enum data_align { align_abi, align_opt, align_both };
    cr5 is not supposed to be used.
 
    On System V implementations, r13 is fixed and not available for use.  */
-/* TODO Maybe make R2 available on PPE */
+
 #define FIXED_REGISTERS  \
-  {0, 1, FIXED_R2, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, FIXED_R13, 1, 1, \
-   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, \
+  {0, 1, FIXED_R2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, FIXED_R13, 0, 0, \
+   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
    0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1,	   \
@@ -1007,8 +1011,8 @@ enum data_align { align_abi, align_opt, align_both };
    Aside from that, you can include as many other registers as you like.  */
 
 #define CALL_USED_REGISTERS  \
-  {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, FIXED_R13, 1, 1, \
-   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, \
+  {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, FIXED_R13, 0, 0, \
+   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, \
    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
    1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1,	   \
@@ -1029,7 +1033,7 @@ enum data_align { align_abi, align_opt, align_both };
    of `CALL_USED_REGISTERS'.  */
 
 #define CALL_REALLY_USED_REGISTERS  \
-  {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, FIXED_R13, 0, 0, \
+  {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, FIXED_R13, 0, 0, \
    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, \
    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
@@ -1109,12 +1113,12 @@ enum data_align { align_abi, align_opt, align_both };
    33,								\
    63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51,		\
    50, 49, 48, 47, 46,						\
-   68,					\
+   75, 74, 69, 68, 72, 71, 70,					\
    MAYBE_R2_AVAILABLE						\
    9, 10, 8, 7, 6, 5, 4,					\
-   3, 0,						\
-   31, 30, 29, 28, 		\
-   13,				\
+   3, EARLY_R12 11, 0,						\
+   31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19,		\
+   18, 17, 16, 15, 14, 13, LATE_R12				\
    66, 65,							\
    73, 1, MAYBE_R2_FIXED 67, 76,				\
    /* AltiVec registers.  */					\
@@ -1407,9 +1411,9 @@ enum reg_class
   /* NO_REGS.  */							\
   { 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000 },	\
   /* BASE_REGS.  */							\
-  { 0xf0002ffe, 0x00000000, 0x00000008, 0x00020000, 0x00000000 },	\
+  { 0xfffffffe, 0x00000000, 0x00000008, 0x00020000, 0x00000000 },	\
   /* GENERAL_REGS.  */							\
-  { 0xf0002fff, 0x00000000, 0x00000008, 0x00020000, 0x00000000 },	\
+  { 0xffffffff, 0x00000000, 0x00000008, 0x00020000, 0x00000000 },	\
   /* FLOAT_REGS.  */							\
   { 0x00000000, 0xffffffff, 0x00000000, 0x00000000, 0x00000000 },	\
   /* ALTIVEC_REGS.  */							\

@@ -588,3 +588,9 @@ Allow double variables in upper registers with -mcpu=power7 or -mvsx
 mupper-regs-sf
 Target Undocumented Mask(UPPER_REGS_SF) Var(rs6000_isa_flags)
 Allow float variables in upper registers with -mcpu=power8 or -mp8-vector
+
+mppe42x-stack
+Target Report Mask(PPE42X_STACK) Var(rs6000_isa_flags)
+Generate stack frame code using PPE stsku/lsku instructions
+
+

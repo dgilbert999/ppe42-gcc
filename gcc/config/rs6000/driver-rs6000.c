@@ -389,6 +389,7 @@ static const struct asm_name asm_names[] = {
   { "405fp",	"-m405" },
   { "ppe405", "-m405" },
   { "ppe42",  "-mppe42" },
+  { "ppe42x", "-mppe42x" },
   { "440",	"-m440" },
   { "440fp",	"-m440" },
   { "464",	"-m440" },

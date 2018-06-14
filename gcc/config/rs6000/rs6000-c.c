@@ -410,11 +410,19 @@ rs6000_cpu_cpp_builtins (cpp_reader *pfile)
   if ((!(TARGET_HARD_FLOAT && (TARGET_FPRS || TARGET_E500_DOUBLE)))
       ||(TARGET_HARD_FLOAT && TARGET_FPRS && !TARGET_DOUBLE_FLOAT))
     builtin_define ("_SOFT_DOUBLE");
-  /* Used by lwarx/stwcx. errata work-around.  */
+
   if (rs6000_cpu == PROCESSOR_PPC405)
     builtin_define ("__PPC405__");
-  if (rs6000_cpu == PROCESSOR_PPE405 || rs6000_cpu == PROCESSOR_PPE42)
+  if (rs6000_cpu == PROCESSOR_PPE405)
+    builtin_define ("__PPE405__");
+  if (TARGET_PPE)
     builtin_define ("__PPE42__");
+  if (rs6000_cpu == PROCESSOR_PPE42)
+    builtin_define ("__PPE42A__");
+  if (rs6000_cpu == PROCESSOR_PPE42X)
+    builtin_define ("__PPE42X__");
+
+  /* Used by lwarx/stwcx. errata work-around.  */
   /* Used by libstdc++.  */
   if (TARGET_NO_LWSYNC)
     builtin_define ("__NO_LWSYNC__");

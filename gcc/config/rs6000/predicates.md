@@ -1240,6 +1240,34 @@
   (and (match_operand 0 "branch_comparison_operator")
        (match_code "eq,lt,gt,ltu,gtu,unordered")))
 
+;; Return 1 if OP is part of a lsku operaton as a PARALLEL
+(define_predicate "lsku_operation"
+ (match_code "parallel")
+{
+  unsigned int dest_regno;
+  unsigned int base_regno;
+  rtx  src_addr;
+
+  if ( GET_CODE(XVECEXP (op, 0, 0)) != SET
+    || GET_CODE(SET_DEST (XVECEXP (op, 0, 0))) != REG
+    || GET_CODE(SET_SRC (XVECEXP (op, 0, 0))) != MEM)
+    return 0;
+
+  dest_regno = REGNO (SET_DEST (XVECEXP (op, 0, 0)));
+  src_addr = XEXP (SET_SRC (XVECEXP (op, 0, 0)), 0);
+
+  if (dest_regno != LR_REGNO ) return 0;
+
+  if (legitimate_indirect_address_p (src_addr, 0))
+  {
+    base_regno = REGNO (src_addr);
+   if (base_regno != 1)
+    	return 0;
+  }
+  return 1;
+})
+
+
 ;; Return 1 if OP is a lvd operation, as a PARALLEL.
 (define_predicate "lvd_operation"
   (match_code "parallel")
@@ -1746,6 +1774,60 @@
 	return 0;
     }
 
+  return 1;
+})
+
+;; Return 1 if OP is valid for stsku operation.
+(define_predicate "stsku_operation"
+  (match_code "parallel")
+{
+  int i;
+  int count = XVECLEN (op, 0);
+  unsigned int src_regno;
+  unsigned int base_regno;
+  rtx  dest_addr;
+
+  if( count < 3) return 0;
+  for(i = 0; i < count; ++i)
+  {
+    if( GET_CODE(XVECEXP (op, 0 ,i)) != SET)
+      return 0;
+    if(i != 1)
+    {
+      if( GET_CODE(SET_DEST (XVECEXP (op, 0, i))) != MEM)
+        return 0;
+    }
+  }
+
+  if(GET_CODE (SET_SRC (XVECEXP (op, 0, 0))) != REG) return 0;
+  src_regno = REGNO (SET_SRC(XVECEXP (op, 0, 0)));
+  if (src_regno != 1)
+    return 0;
+
+  dest_addr = XEXP (SET_DEST (XVECEXP (op, 0, 0)), 0);
+  if (legitimate_indirect_address_p (dest_addr, 0))
+  {
+    base_regno = REGNO (dest_addr);
+    if (base_regno != 1)
+      return 0;
+  }
+
+  if(GET_CODE (SET_SRC (XVECEXP (op, 0, 2))) != REG)
+    return 0;
+  src_regno = REGNO (SET_SRC (XVECEXP (op, 0, 2)));
+  if (src_regno != LR_REGNO )
+    return 0;
+
+  for(i = 2; i < count; ++i)
+  {
+    dest_addr = XEXP (SET_DEST (XVECEXP (op, 0, i)), 0);
+    if (legitimate_indirect_address_p (dest_addr, 0))
+    {
+      base_regno = REGNO (dest_addr);
+      if (base_regno != 1)
+        return 0;
+    }
+  }
   return 1;
 })
 
