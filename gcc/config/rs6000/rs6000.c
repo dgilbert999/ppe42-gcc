@@ -23455,6 +23455,12 @@ rs6000_emit_prologue (void)
                                      gen_rtx_PLUS (Pmode, frame_reg_rtx,
                                                    GEN_INT (-(info->total_size))))); */
 
+          if(frame_pointer_needed)
+          {
+              insn = emit_move_insn (gen_rtx_REG (Pmode, HARD_FRAME_POINTER_REGNUM),
+                                     sp_reg_rtx);
+              RTX_FRAME_RELATED_P (insn) = 1;
+          }
           emit_insn( gen_blockage ());
 
           // PPE42X_STACK done
@@ -25449,6 +25455,15 @@ ppe42x_emit_epilogue(int sibcall)
   int reg_size = 4;
   int i = 0;
   rtvec p;
+
+  if (frame_pointer_needed)
+  {
+      // restore sp_reg from frame_pointer
+      // lsku does not read backpointer from 0(r1) so we don't need to restore
+      insn = emit_move_insn(sp_reg_rtx,
+                            gen_rtx_REG(Pmode,HARD_FRAME_POINTER_REGNUM));
+      RTX_FRAME_RELATED_P(insn) = 1;
+  }
 
   if(info->lr_save_p || info->push_p)
   {
