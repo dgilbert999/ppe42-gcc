@@ -56,7 +56,7 @@ cd ../build_binutils
 rm -Rf *
 ../ppe42-binutils/configure --enable-shared --enable-64-bit-bfd --target=$TARGET --prefix=$PREFIX -v
 make configure-host
-make LDFLAGS=-all-static MAKEINFO=true CFLAGS+=-Wno-implicit-fallthrough CFLAGS+=-Wno-error=cast-function-type CFLAGS+=-Wno-error=stringop-truncation CFLAGS+=-Wno-error=pointer-compare
+make LDFLAGS=-all-static MAKEINFO=true CFLAGS+=-Wno-implicit-fallthrough CFLAGS+=-Wno-error=cast-function-type CFLAGS+=-Wno-error=stringop-truncation CFLAGS+=-Wno-error=pointer-compare CFLAGS+=-Wno-error=implicit-int CFLAGS+=-Wno-error=format-overflow CFLAGS+=-Wno-error=address CFLAGS+=-Wno-error=calloc-transposed-args
 make MAKEINFO=true install
 ```
 
